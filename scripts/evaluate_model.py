@@ -14,6 +14,7 @@ import argparse
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import yaml
 from pathlib import Path
 from tqdm import tqdm
 
@@ -23,30 +24,58 @@ from siad.train.losses import compute_jepa_world_model_loss
 
 
 def load_model_from_checkpoint(checkpoint_path: str, device: str = "cuda"):
-    """Load model from checkpoint"""
+    """Load model from checkpoint, inferring architecture from weights or config"""
     checkpoint = torch.load(checkpoint_path, map_location=device)
-    
-    # Get config from checkpoint
+    state_dict = checkpoint['model_state_dict']
+
+    # Try to get config from checkpoint first
     config = checkpoint.get('config', {})
-    
-    # Create model (infer from checkpoint if config missing)
+
+    # If config has model parameters, use those
+    if 'latent_dim' in config:
+        latent_dim = config['latent_dim']
+        print(f"Using latent_dim={latent_dim} from checkpoint config")
+    else:
+        # Infer latent_dim from encoder positional embeddings shape
+        # encoder.pos_embed has shape [1, 256, latent_dim]
+        if 'encoder.pos_embed' not in state_dict:
+            raise ValueError(
+                "Cannot infer model size: checkpoint has no 'config' with latent_dim "
+                "and no 'encoder.pos_embed' in state_dict. "
+                "This may be an old checkpoint format."
+            )
+        latent_dim = state_dict['encoder.pos_embed'].shape[-1]
+        print(f"Inferred latent_dim={latent_dim} from encoder.pos_embed shape")
+
+    # Load model size configurations
+    config_path = Path(__file__).parent.parent / "configs" / "model_sizes.yaml"
+    with open(config_path) as f:
+        model_configs = yaml.safe_load(f)
+
+    # Map latent_dim to model size
+    size_map = {512: 'tiny', 768: 'small', 1024: 'medium', 1536: 'large', 2048: 'xlarge'}
+    model_size = size_map.get(latent_dim)
+
+    if not model_size or model_size not in model_configs:
+        raise ValueError(
+            f"Cannot infer model size from latent_dim={latent_dim}. "
+            f"Expected one of {list(size_map.keys())}"
+        )
+
+    print(f"Detected model size: {model_size} (latent_dim={latent_dim})")
+
+    # Create model with detected configuration
+    model_config = model_configs[model_size]
     model = WorldModel(
         in_channels=8,
-        latent_dim=config.get('latent_dim', 768),  # Default to small
         action_dim=2,
-        encoder_blocks=config.get('encoder_blocks', 6),
-        encoder_heads=config.get('encoder_heads', 12),
-        encoder_mlp_dim=config.get('encoder_mlp_dim', 3072),
-        transition_blocks=config.get('transition_blocks', 8),
-        transition_heads=config.get('transition_heads', 12),
-        transition_mlp_dim=config.get('transition_mlp_dim', 3072),
-        dropout=config.get('dropout', 0.1)
+        **model_config
     )
-    
-    model.load_state_dict(checkpoint['model_state_dict'])
+
+    model.load_state_dict(state_dict)
     model.to(device)
-    model.eval()  # Set to evaluation mode
-    
+    model.eval()
+
     return model, checkpoint
 
 
