@@ -37,15 +37,27 @@ def load_model_from_checkpoint(checkpoint_path: str, device: str = "cuda"):
         print(f"Using latent_dim={latent_dim} from checkpoint config")
     else:
         # Infer latent_dim from encoder positional embeddings shape
-        # encoder.pos_embed has shape [1, 256, latent_dim]
-        if 'encoder.pos_embed' not in state_dict:
+        # Try multiple possible keys for positional embeddings
+        pos_embed_keys = [
+            'context_encoder.patchify.pos_embed',  # Current format
+            'encoder.pos_embed',                    # Alternative format
+            'obs_encoder.pos_embed',                # Legacy format
+        ]
+
+        latent_dim = None
+        for key in pos_embed_keys:
+            if key in state_dict:
+                # pos_embed has shape [1, 256, latent_dim]
+                latent_dim = state_dict[key].shape[-1]
+                print(f"Inferred latent_dim={latent_dim} from {key} shape")
+                break
+
+        if latent_dim is None:
             raise ValueError(
                 "Cannot infer model size: checkpoint has no 'config' with latent_dim "
-                "and no 'encoder.pos_embed' in state_dict. "
-                "This may be an old checkpoint format."
+                f"and none of the expected positional embedding keys found: {pos_embed_keys}. "
+                "This may be an old or incompatible checkpoint format."
             )
-        latent_dim = state_dict['encoder.pos_embed'].shape[-1]
-        print(f"Inferred latent_dim={latent_dim} from encoder.pos_embed shape")
 
     # Load model size configurations
     config_path = Path(__file__).parent.parent / "configs" / "model_sizes.yaml"
