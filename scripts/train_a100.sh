@@ -80,7 +80,7 @@ fi
 # Check training data
 echo -e "\n7. Checking training data..."
 if [ -f "$MANIFEST" ]; then
-    uv run python scripts/check_training_data.py --manifest "$MANIFEST"
+    uv run python scripts/check_training_data.py --manifest "$MANIFEST" --data-root data/geotiffs
 else
     echo "⚠️  Warning: Manifest not found at $MANIFEST"
     echo "   Specify manifest path as first argument"
