@@ -44,6 +44,7 @@ uv run python -c "from google.cloud import storage; client = storage.Client(); p
 # Parse arguments
 MANIFEST="${1:-data/manifest.jsonl}"
 MODEL_SIZE="${MODEL_SIZE:-tiny}"
+CONTEXT_LENGTH="${CONTEXT_LENGTH:-1}"
 BATCH_SIZE="${BATCH_SIZE:-32}"
 EPOCHS="${EPOCHS:-50}"
 LR="${LR:-1e-4}"
@@ -52,15 +53,28 @@ USE_WANDB="${USE_WANDB:-true}"
 WANDB_PROJECT="${WANDB_PROJECT:-siad-world-model}"
 
 echo -e "\n6. Training configuration:"
-echo "  Manifest:      $MANIFEST"
-echo "  Model size:    $MODEL_SIZE"
-echo "  Batch size:    $BATCH_SIZE"
-echo "  Epochs:        $EPOCHS"
-echo "  Learning rate: $LR"
-echo "  Workers:       $NUM_WORKERS"
-echo "  Wandb:         $USE_WANDB"
+echo "  Manifest:        $MANIFEST"
+echo "  Model size:      $MODEL_SIZE"
+echo "  Context length:  $CONTEXT_LENGTH month(s)"
+echo "  Batch size:      $BATCH_SIZE"
+echo "  Epochs:          $EPOCHS"
+echo "  Learning rate:   $LR"
+echo "  Workers:         $NUM_WORKERS"
+echo "  Wandb:           $USE_WANDB"
 if [ "$USE_WANDB" = "true" ]; then
-    echo "  Wandb project: $WANDB_PROJECT"
+    echo "  Wandb project:   $WANDB_PROJECT"
+fi
+
+# Provide batch size recommendations based on context length
+if [ "$CONTEXT_LENGTH" -eq 1 ] && [ "$BATCH_SIZE" -ne 32 ]; then
+    echo ""
+    echo "  NOTE: For context_length=1, recommended batch_size=32 (memory efficient)"
+elif [ "$CONTEXT_LENGTH" -eq 3 ] && [ "$BATCH_SIZE" -gt 24 ]; then
+    echo ""
+    echo "  WARNING: For context_length=3, recommended batch_size=24 or lower (memory usage)"
+elif [ "$CONTEXT_LENGTH" -eq 6 ] && [ "$BATCH_SIZE" -gt 16 ]; then
+    echo ""
+    echo "  WARNING: For context_length=6, recommended batch_size=16 or lower (high memory usage)"
 fi
 
 # Check training data
@@ -87,6 +101,7 @@ TRAIN_CMD="uv run python scripts/train.py \
     --manifest \"$MANIFEST\" \
     --data-root data/geotiffs \
     --model-size $MODEL_SIZE \
+    --context-length $CONTEXT_LENGTH \
     --batch-size $BATCH_SIZE \
     --epochs $EPOCHS \
     --lr $LR \

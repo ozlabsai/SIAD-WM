@@ -74,7 +74,7 @@ MODEL_SIZE=xlarge ./scripts/train_a100.sh data/manifest.jsonl
 
 ## Priority 3: Longer Context Window (High ROI for Temporal Tasks)
 
-**Current**: 1-month context  
+**Current**: 1-month context
 **Better**: 3-6 month context
 
 ### Why Longer Context Helps
@@ -84,18 +84,42 @@ MODEL_SIZE=xlarge ./scripts/train_a100.sh data/manifest.jsonl
 
 ### Implementation
 
-```python
-# In scripts/train.py, line 55:
-context_length=3,  # Changed from 1
+#### Using Command Line Arguments
 
-# Or use configuration file:
-# configs/training_configs.yaml has preset configs
+```bash
+# Default: 1-month context (memory efficient)
+./scripts/train_a100.sh data/manifest.jsonl
+
+# 3-month context (recommended for better temporal modeling)
+CONTEXT_LENGTH=3 BATCH_SIZE=24 ./scripts/train_a100.sh data/manifest.jsonl
+
+# 6-month context (best temporal modeling, requires more VRAM)
+CONTEXT_LENGTH=6 BATCH_SIZE=16 ./scripts/train_a100.sh data/manifest.jsonl
+
+# Using Python directly
+uv run python scripts/train.py \
+    --manifest data/manifest.jsonl \
+    --context-length 3 \
+    --batch-size 24 \
+    --model-size medium
 ```
 
-**Memory impact**:
-- context_length=1: 32 batch size  
-- context_length=3: 24 batch size (33% more memory)
-- context_length=6: 16 batch size (2× more memory)
+#### Memory Impact & Batch Size Recommendations
+
+| Context Length | Recommended Batch Size | Memory Usage | When to Use |
+|----------------|------------------------|--------------|-------------|
+| 1 month | 32 | Baseline | Quick experiments, limited data |
+| 3 months | 24 | +33% | Better seasonal patterns |
+| 6 months | 16 | +100% | Best temporal modeling |
+
+**Note**: The training script will warn you if your batch size is too large for the context length.
+
+#### Validation
+
+The dataset loader validates that you have enough data:
+- Minimum required months = `context_length + rollout_horizon`
+- For context_length=6 and rollout_horizon=6: need at least 12 months
+- If your data has only 12 months, max context_length=6
 
 **Expected improvement**: 0.0888 → **0.075-0.080** loss
 
@@ -197,14 +221,18 @@ num_tiles: 200
 # Expected best: large @ 0.055 loss
 ```
 
-### Phase 2: Architecture Tuning
+### Phase 2: Context Length Tuning
 ```bash
-# Try longer context
-context_length: 3
+# Week 3: Try 3-month context
+CONTEXT_LENGTH=3 BATCH_SIZE=24 MODEL_SIZE=large ./scripts/train_a100.sh data/manifest.jsonl
 # Expected: 0.055 → 0.050 loss
 
+# Week 4: Try 6-month context (if you have enough data)
+CONTEXT_LENGTH=6 BATCH_SIZE=16 MODEL_SIZE=large ./scripts/train_a100.sh data/manifest.jsonl
+# Expected: 0.050 → 0.045 loss
+
 # Try longer rollout
-rollout_horizon: 12  # Full year predictions
+# (requires code changes in train.py to set rollout_horizon=12)
 ```
 
 ### Phase 3: Hyperparameter Sweep
@@ -267,23 +295,76 @@ metrics = {
 
 ## Quick Wins (Can Do Today)
 
-1. **Train medium model on existing data**
+1. **Train with 3-month context on existing data**
+   ```bash
+   CONTEXT_LENGTH=3 BATCH_SIZE=24 MODEL_SIZE=small ./scripts/train_a100.sh data/manifest.jsonl
+   # ~30 minutes → better temporal modeling
+   ```
+
+2. **Train medium model on existing data**
    ```bash
    MODEL_SIZE=medium ./scripts/train_a100.sh data/manifest.jsonl
    # 45 minutes → ~0.075 loss
    ```
 
-2. **Longer training**
+3. **Combine longer context + larger model**
+   ```bash
+   CONTEXT_LENGTH=3 BATCH_SIZE=24 MODEL_SIZE=medium ./scripts/train_a100.sh data/manifest.jsonl
+   # Best single improvement!
+   ```
+
+4. **Longer training**
    ```bash
    EPOCHS=100 ./scripts/train_a100.sh data/manifest.jsonl
    # Better convergence
    ```
 
-3. **Upload models to HuggingFace**
+5. **Upload models to HuggingFace**
    ```bash
    ./scripts/upload_model.sh checkpoints/checkpoint_best.pth small OzLabs/siad-wm-small
    # Share with community
    ```
+
+## Example Training Commands
+
+### Quick Test Run (5-10 minutes)
+```bash
+# Tiny model, 1-month context, 10 epochs
+uv run python scripts/train.py \
+    --manifest data/manifest.jsonl \
+    --model-size tiny \
+    --context-length 1 \
+    --batch-size 32 \
+    --epochs 10
+```
+
+### Recommended Starting Point (30 minutes)
+```bash
+# Small model, 3-month context, 50 epochs
+CONTEXT_LENGTH=3 BATCH_SIZE=24 MODEL_SIZE=small EPOCHS=50 \
+    ./scripts/train_a100.sh data/manifest.jsonl
+```
+
+### Production Quality (2-3 hours)
+```bash
+# Large model, 6-month context, 100 epochs, with augmentation
+uv run python scripts/train.py \
+    --manifest data/manifest.jsonl \
+    --model-size large \
+    --context-length 6 \
+    --batch-size 16 \
+    --epochs 100 \
+    --augment \
+    --wandb \
+    --wandb-project siad-production
+```
+
+### Memory-Constrained Setup (lower VRAM GPU)
+```bash
+# Medium model, 1-month context, smaller batch
+CONTEXT_LENGTH=1 BATCH_SIZE=16 MODEL_SIZE=medium \
+    ./scripts/train_a100.sh data/manifest.jsonl
+```
 
 ---
 
