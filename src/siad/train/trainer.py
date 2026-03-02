@@ -284,7 +284,11 @@ class Trainer:
         return avg_loss, val_metrics
 
     def save_checkpoint(self, filename: str, is_best: bool = False):
-        """Save checkpoint"""
+        """Save checkpoint
+
+        Only keeps: checkpoint_best.pth, checkpoint_latest.pth, checkpoint_final.pth
+        Automatically removes old epoch checkpoints to save disk space.
+        """
         checkpoint = {
             "epoch": self.epoch,
             "global_step": self.global_step,
@@ -297,29 +301,41 @@ class Trainer:
             "config": self.config,
         }
 
-        path = self.checkpoint_dir / filename
-        torch.save(checkpoint, path)
-        print(f"Saved checkpoint: {path}")
-
-        # Save to wandb as artifact
-        if self.use_wandb:
-            artifact = wandb.Artifact(
-                name=f"model-{wandb.run.id}",
-                type="model",
-                metadata={
-                    "epoch": self.epoch,
-                    "train_loss": checkpoint["train_loss"],
-                    "val_loss": checkpoint["val_loss"],
-                    "is_best": is_best,
-                }
-            )
-            artifact.add_file(str(path))
-            wandb.log_artifact(artifact, aliases=["latest"] + (["best"] if is_best else []))
-
+        # Only save best and final checkpoints, plus a rolling latest
+        # This prevents disk space issues from accumulating 50+ checkpoint files
         if is_best:
-            best_path = self.checkpoint_dir / "checkpoint_best.pth"
-            torch.save(checkpoint, best_path)
-            print(f"Saved best checkpoint: {best_path}")
+            # Save as best
+            path = self.checkpoint_dir / "checkpoint_best.pth"
+            torch.save(checkpoint, path)
+            print(f"Saved best checkpoint: {path}")
+
+            # Upload to wandb
+            if self.use_wandb:
+                artifact = wandb.Artifact(
+                    name=f"model-{wandb.run.id}",
+                    type="model",
+                    metadata={
+                        "epoch": self.epoch,
+                        "train_loss": checkpoint["train_loss"],
+                        "val_loss": checkpoint["val_loss"],
+                        "is_best": True,
+                    }
+                )
+                artifact.add_file(str(path))
+                wandb.log_artifact(artifact, aliases=["best"])
+                print(f"  Uploaded to wandb as artifact")
+
+        elif filename == "checkpoint_final.pth":
+            # Save final checkpoint
+            path = self.checkpoint_dir / filename
+            torch.save(checkpoint, path)
+            print(f"Saved final checkpoint: {path}")
+
+        else:
+            # Save as latest (rolling - overwrites each epoch)
+            path = self.checkpoint_dir / "checkpoint_latest.pth"
+            torch.save(checkpoint, path)
+            # Don't print every epoch to reduce log spam
 
     def train(self):
         """Full training loop"""
@@ -353,15 +369,19 @@ class Trainer:
             if not torch.isnan(torch.tensor(val_loss)):
                 print(f"  Val loss: {val_loss:.4f}")
 
-            # Save
-            if (epoch + 1) % self.config["save_every"] == 0:
-                self.save_checkpoint(f"checkpoint_epoch_{epoch+1}.pth")
-
-            # Best model
+            # Check if best model (save before regular checkpoint)
+            is_best = False
             if not torch.isnan(torch.tensor(val_loss)) and val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
-                self.save_checkpoint(f"checkpoint_epoch_{epoch+1}.pth", is_best=True)
+                is_best = True
                 print(f"  New best validation loss: {val_loss:.4f}")
+
+            # Save checkpoint (best or latest)
+            if is_best:
+                self.save_checkpoint("checkpoint_best.pth", is_best=True)
+            else:
+                # Save as rolling latest (overwrites each epoch to save space)
+                self.save_checkpoint("checkpoint_latest.pth", is_best=False)
 
         # Final
         self.save_checkpoint("checkpoint_final.pth")
