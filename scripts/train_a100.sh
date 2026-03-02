@@ -83,6 +83,7 @@ echo "========================================="
 # Build training command
 TRAIN_CMD="uv run python scripts/train.py \
     --manifest \"$MANIFEST\" \
+    --data-root data/geotiffs \
     --batch-size $BATCH_SIZE \
     --epochs $EPOCHS \
     --lr $LR \
