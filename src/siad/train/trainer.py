@@ -1,11 +1,10 @@
 """Training loop for SIAD World Model
 
-Implements:
-- Multi-step rollout training with EMA target encoder
-- Checkpointing (best + periodic)
-- Gradient clipping
-- Learning rate scheduling
-- Reproducibility (seed management)
+Implements MODEL.md-compliant training with:
+- JEPA rollout loss
+- EMA target encoder updates
+- Checkpointing
+- Mixed precision (optional)
 """
 
 import torch
@@ -17,29 +16,18 @@ import json
 import time
 from tqdm import tqdm
 
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
 from siad.model import WorldModel
+from siad.train.losses import compute_jepa_world_model_loss
 
 
 class Trainer:
-    """SIAD World Model Trainer
+    """SIAD World Model Trainer per MODEL.md
 
-    Handles:
-        - Training loop with EMA updates
-        - Validation
-        - Checkpointing (best model + periodic saves)
-        - Gradient clipping
-        - Learning rate scheduling
-
-    Args:
-        model: WorldModel instance
-        train_loader: DataLoader for training set
-        val_loader: DataLoader for validation set
-        config: Training configuration dict
-        checkpoint_dir: Where to save checkpoints
-        device: torch.device or str (default: auto-detect)
+    Uses new interfaces:
+    - model.encode()
+    - model.rollout()
+    - model.encode_targets()
+    - compute_jepa_world_model_loss()
     """
 
     def __init__(
@@ -57,48 +45,47 @@ class Trainer:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
-        # Device setup
+        # Device
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
             self.device = device
         self.model.to(self.device)
 
-        # Default config
+        # Config
         self.config = {
             "learning_rate": 1e-4,
             "weight_decay": 1e-5,
             "epochs": 50,
-            "ema_momentum": 0.996,
             "grad_clip_norm": 1.0,
-            "loss_type": "cosine",  # or "mse"
-            "loss_weights": None,   # Uniform weights
-            "save_every": 5,        # Save checkpoint every N epochs
+            "save_every": 5,
             "seed": 42,
-            "context_length": 6,
             "rollout_horizon": 6,
-            "band_order_version": "v1"
         }
         if config:
             self.config.update(config)
 
-        # Set seed for reproducibility (Principle V)
-        self._set_seed(self.config["seed"])
+        # Seed
+        torch.manual_seed(self.config["seed"])
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(self.config["seed"])
 
-        # Optimizer and scheduler
+        # Optimizer
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(),
             lr=self.config["learning_rate"],
             weight_decay=self.config["weight_decay"]
         )
 
+        # Scheduler
         self.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer,
             T_max=self.config["epochs"]
         )
 
-        # Training state
+        # State
         self.epoch = 0
+        self.global_step = 0
         self.best_val_loss = float('inf')
         self.train_losses = []
         self.val_losses = []
@@ -107,22 +94,9 @@ class Trainer:
         print(f"  Device: {self.device}")
         print(f"  Learning rate: {self.config['learning_rate']}")
         print(f"  Epochs: {self.config['epochs']}")
-        print(f"  EMA momentum: {self.config['ema_momentum']}")
-        print(f"  Checkpoint dir: {self.checkpoint_dir}")
-
-    def _set_seed(self, seed: int):
-        """Set random seeds for reproducibility"""
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
 
     def train_epoch(self) -> Tuple[float, Dict[str, float]]:
-        """Train for one epoch
-
-        Returns:
-            avg_loss: Average training loss
-            metrics: Dict of aggregated metrics
-        """
+        """Train for one epoch"""
         self.model.train()
         epoch_losses = []
         epoch_metrics = {}
@@ -131,20 +105,28 @@ class Trainer:
 
         for batch_idx, batch in enumerate(pbar):
             # Move to device
-            obs_context = batch["obs_context"].to(self.device)
-            actions_rollout = batch["actions_rollout"].to(self.device)
-            obs_targets = batch["obs_targets"].to(self.device)
+            x_context = batch["obs_context"].to(self.device)
+            actions = batch["actions_rollout"].to(self.device)
+            x_targets = batch["obs_targets"].to(self.device)
 
-            # Forward pass and compute loss
-            loss, metrics = self.model.compute_rollout_loss(
-                obs_context,
-                actions_rollout,
-                obs_targets,
-                loss_weights=self.config["loss_weights"],
-                loss_type=self.config["loss_type"]
-            )
+            # Forward pass per MODEL.md
+            # 1. Encode context
+            z0 = self.model.encode(x_context)
 
-            # Backward pass
+            # 2. Rollout predictions
+            H = self.config["rollout_horizon"]
+            z_pred = self.model.rollout(z0, actions, H=H)
+
+            # 3. Encode targets (batch processing)
+            B, H_batch, C, Hp, Wp = x_targets.shape
+            x_targets_flat = x_targets.view(B * H_batch, C, Hp, Wp)
+            z_target_flat = self.model.encode_targets(x_targets_flat)
+            z_target = z_target_flat.view(B, H_batch, 256, 512)
+
+            # 4. Compute loss
+            loss, metrics = compute_jepa_world_model_loss(z_pred, z_target)
+
+            # Backward
             self.optimizer.zero_grad()
             loss.backward()
 
@@ -157,8 +139,8 @@ class Trainer:
 
             self.optimizer.step()
 
-            # Update target encoder via EMA
-            self.model.update_target_encoder(momentum=self.config["ema_momentum"])
+            # Update target encoder EMA
+            self.model.update_target_encoder(step=self.global_step)
 
             # Track metrics
             epoch_losses.append(loss.item())
@@ -167,10 +149,11 @@ class Trainer:
                     epoch_metrics[key] = []
                 epoch_metrics[key].append(value)
 
-            # Update progress bar
+            # Update progress
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
+            self.global_step += 1
 
-        # Aggregate metrics
+        # Aggregate
         avg_loss = sum(epoch_losses) / len(epoch_losses)
         for key in epoch_metrics:
             epoch_metrics[key] = sum(epoch_metrics[key]) / len(epoch_metrics[key])
@@ -179,12 +162,7 @@ class Trainer:
 
     @torch.no_grad()
     def validate(self) -> Tuple[float, Dict[str, float]]:
-        """Validate on validation set
-
-        Returns:
-            avg_loss: Average validation loss
-            metrics: Dict of aggregated metrics
-        """
+        """Validate"""
         if self.val_loader is None:
             return float('nan'), {}
 
@@ -193,19 +171,20 @@ class Trainer:
         val_metrics = {}
 
         for batch in tqdm(self.val_loader, desc="Validation"):
-            # Move to device
-            obs_context = batch["obs_context"].to(self.device)
-            actions_rollout = batch["actions_rollout"].to(self.device)
-            obs_targets = batch["obs_targets"].to(self.device)
+            x_context = batch["obs_context"].to(self.device)
+            actions = batch["actions_rollout"].to(self.device)
+            x_targets = batch["obs_targets"].to(self.device)
 
-            # Forward pass
-            loss, metrics = self.model.compute_rollout_loss(
-                obs_context,
-                actions_rollout,
-                obs_targets,
-                loss_weights=self.config["loss_weights"],
-                loss_type=self.config["loss_type"]
-            )
+            # Forward
+            z0 = self.model.encode(x_context)
+            z_pred = self.model.rollout(z0, actions, H=self.config["rollout_horizon"])
+
+            B, H, C, Hp, Wp = x_targets.shape
+            x_targets_flat = x_targets.view(B * H, C, Hp, Wp)
+            z_target_flat = self.model.encode_targets(x_targets_flat)
+            z_target = z_target_flat.view(B, H, 256, 512)
+
+            loss, metrics = compute_jepa_world_model_loss(z_pred, z_target)
 
             val_losses.append(loss.item())
             for key, value in metrics.items():
@@ -221,56 +200,30 @@ class Trainer:
         return avg_loss, val_metrics
 
     def save_checkpoint(self, filename: str, is_best: bool = False):
-        """Save model checkpoint
-
-        Args:
-            filename: Checkpoint filename
-            is_best: Whether this is the best model so far
-        """
+        """Save checkpoint"""
         checkpoint = {
             "epoch": self.epoch,
+            "global_step": self.global_step,
             "model_state_dict": self.model.state_dict(),
             "optimizer_state_dict": self.optimizer.state_dict(),
             "scheduler_state_dict": self.scheduler.state_dict(),
             "train_loss": self.train_losses[-1] if self.train_losses else float('nan'),
             "val_loss": self.val_losses[-1] if self.val_losses else float('nan'),
             "best_val_loss": self.best_val_loss,
-            "config": {**self.config, **self.model.get_config()},
-            "seed": self.config["seed"]
+            "config": self.config,
         }
 
-        checkpoint_path = self.checkpoint_dir / filename
-        torch.save(checkpoint, checkpoint_path)
-        print(f"Saved checkpoint: {checkpoint_path}")
+        path = self.checkpoint_dir / filename
+        torch.save(checkpoint, path)
+        print(f"Saved checkpoint: {path}")
 
-        # Save best model separately
         if is_best:
             best_path = self.checkpoint_dir / "checkpoint_best.pth"
             torch.save(checkpoint, best_path)
             print(f"Saved best checkpoint: {best_path}")
 
-    def load_checkpoint(self, checkpoint_path: str):
-        """Load checkpoint and resume training
-
-        Args:
-            checkpoint_path: Path to checkpoint file
-        """
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
-
-        self.model.load_state_dict(checkpoint["model_state_dict"])
-        self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-        self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-        self.epoch = checkpoint["epoch"]
-        self.best_val_loss = checkpoint.get("best_val_loss", float('inf'))
-
-        print(f"Loaded checkpoint from epoch {self.epoch}")
-
     def train(self):
-        """Run full training loop
-
-        Returns:
-            history: Dict with train/val losses per epoch
-        """
+        """Full training loop"""
         print(f"\nStarting training for {self.config['epochs']} epochs...")
         print(f"Training samples: {len(self.train_loader.dataset)}")
         if self.val_loader:
@@ -291,9 +244,8 @@ class Trainer:
                 self.val_losses.append(val_loss)
             else:
                 val_loss = float('nan')
-                val_metrics = {}
 
-            # Update scheduler
+            # Scheduler
             self.scheduler.step()
 
             # Log
@@ -302,17 +254,17 @@ class Trainer:
             if not torch.isnan(torch.tensor(val_loss)):
                 print(f"  Val loss: {val_loss:.4f}")
 
-            # Save checkpoint
+            # Save
             if (epoch + 1) % self.config["save_every"] == 0:
                 self.save_checkpoint(f"checkpoint_epoch_{epoch+1}.pth")
 
-            # Save best model
+            # Best model
             if not torch.isnan(torch.tensor(val_loss)) and val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
                 self.save_checkpoint(f"checkpoint_epoch_{epoch+1}.pth", is_best=True)
                 print(f"  New best validation loss: {val_loss:.4f}")
 
-        # Final checkpoint
+        # Final
         self.save_checkpoint("checkpoint_final.pth")
 
         elapsed = time.time() - start_time
