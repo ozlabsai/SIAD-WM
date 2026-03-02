@@ -26,6 +26,7 @@ dependencies = [
     "tqdm>=4.66.0",
     "python-dateutil>=2.9.0.post0",
     "wandb>=0.24.2",
+    "huggingface-hub>=0.36.0",
 ]
 
 [project.optional-dependencies]
