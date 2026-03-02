@@ -309,21 +309,10 @@ class Trainer:
             torch.save(checkpoint, path)
             print(f"Saved best checkpoint: {path}")
 
-            # Upload to wandb
-            if self.use_wandb:
-                artifact = wandb.Artifact(
-                    name=f"model-{wandb.run.id}",
-                    type="model",
-                    metadata={
-                        "epoch": self.epoch,
-                        "train_loss": checkpoint["train_loss"],
-                        "val_loss": checkpoint["val_loss"],
-                        "is_best": True,
-                    }
-                )
-                artifact.add_file(str(path))
-                wandb.log_artifact(artifact, aliases=["best"])
-                print(f"  Uploaded to wandb as artifact")
+            # NOTE: Wandb artifacts disabled to prevent disk space issues
+            # Wandb still logs all metrics - artifacts just duplicate the checkpoints
+            # and require copying ~1GB+ files to staging, which can fill the disk.
+            # Upload best checkpoint to HuggingFace manually after training instead.
 
         elif filename == "checkpoint_final.pth":
             # Save final checkpoint
