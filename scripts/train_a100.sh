@@ -47,13 +47,19 @@ BATCH_SIZE="${BATCH_SIZE:-32}"
 EPOCHS="${EPOCHS:-50}"
 LR="${LR:-1e-4}"
 NUM_WORKERS="${NUM_WORKERS:-16}"
+USE_WANDB="${USE_WANDB:-true}"
+WANDB_PROJECT="${WANDB_PROJECT:-siad-world-model}"
 
 echo -e "\n6. Training configuration:"
-echo "  Manifest:    $MANIFEST"
-echo "  Batch size:  $BATCH_SIZE"
-echo "  Epochs:      $EPOCHS"
+echo "  Manifest:      $MANIFEST"
+echo "  Batch size:    $BATCH_SIZE"
+echo "  Epochs:        $EPOCHS"
 echo "  Learning rate: $LR"
-echo "  Workers:     $NUM_WORKERS"
+echo "  Workers:       $NUM_WORKERS"
+echo "  Wandb:         $USE_WANDB"
+if [ "$USE_WANDB" = "true" ]; then
+    echo "  Wandb project: $WANDB_PROJECT"
+fi
 
 # Check training data
 echo -e "\n7. Checking training data..."
@@ -74,13 +80,22 @@ fi
 echo -e "\n8. Starting training..."
 echo "========================================="
 
-uv run python scripts/train.py \
-    --manifest "$MANIFEST" \
-    --batch-size "$BATCH_SIZE" \
-    --epochs "$EPOCHS" \
-    --lr "$LR" \
-    --num-workers "$NUM_WORKERS" \
-    --checkpoint-dir checkpoints
+# Build training command
+TRAIN_CMD="uv run python scripts/train.py \
+    --manifest \"$MANIFEST\" \
+    --batch-size $BATCH_SIZE \
+    --epochs $EPOCHS \
+    --lr $LR \
+    --num-workers $NUM_WORKERS \
+    --checkpoint-dir checkpoints"
+
+# Add wandb flags if enabled
+if [ "$USE_WANDB" = "true" ]; then
+    TRAIN_CMD="$TRAIN_CMD --wandb --wandb-project \"$WANDB_PROJECT\""
+fi
+
+# Execute training
+eval $TRAIN_CMD
 
 echo ""
 echo "========================================="

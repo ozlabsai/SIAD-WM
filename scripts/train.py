@@ -27,6 +27,9 @@ def main():
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints", help="Checkpoint directory")
     parser.add_argument("--num-workers", type=int, default=16, help="DataLoader workers")
+    parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
+    parser.add_argument("--wandb-project", type=str, default="siad-world-model", help="Wandb project name")
+    parser.add_argument("--wandb-name", type=str, default=None, help="Wandb run name")
     args = parser.parse_args()
 
     print("="*60)
@@ -113,7 +116,10 @@ def main():
             "rollout_horizon": 6,
         },
         checkpoint_dir=args.checkpoint_dir,
-        device=device
+        device=device,
+        use_wandb=args.wandb,
+        wandb_project=args.wandb_project,
+        wandb_name=args.wandb_name
     )
 
     # Train!

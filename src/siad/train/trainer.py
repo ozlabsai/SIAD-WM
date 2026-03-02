@@ -5,6 +5,7 @@ Implements MODEL.md-compliant training with:
 - EMA target encoder updates
 - Checkpointing
 - Mixed precision (optional)
+- Weights & Biases monitoring
 """
 
 import torch
@@ -15,6 +16,13 @@ from typing import Dict, Optional, Tuple
 import json
 import time
 from tqdm import tqdm
+
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    print("Warning: wandb not installed. Monitoring disabled.")
 
 from siad.model import WorldModel
 from siad.train.losses import compute_jepa_world_model_loss
@@ -37,7 +45,10 @@ class Trainer:
         val_loader: Optional[DataLoader] = None,
         config: Optional[Dict] = None,
         checkpoint_dir: str = "checkpoints",
-        device: Optional[torch.device] = None
+        device: Optional[torch.device] = None,
+        use_wandb: bool = False,
+        wandb_project: str = "siad-world-model",
+        wandb_name: Optional[str] = None
     ):
         self.model = model
         self.train_loader = train_loader
@@ -90,6 +101,30 @@ class Trainer:
         self.train_losses = []
         self.val_losses = []
 
+        # Wandb
+        self.use_wandb = use_wandb and WANDB_AVAILABLE
+        if self.use_wandb:
+            # Model parameters count
+            total_params = sum(p.numel() for p in model.parameters())
+            trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+            wandb.init(
+                project=wandb_project,
+                name=wandb_name,
+                config={
+                    **self.config,
+                    "model_params": total_params,
+                    "trainable_params": trainable_params,
+                    "device": str(self.device),
+                    "train_samples": len(train_loader.dataset),
+                    "val_samples": len(val_loader.dataset) if val_loader else 0,
+                    "batch_size": train_loader.batch_size,
+                }
+            )
+            # Watch model for gradient tracking
+            wandb.watch(self.model, log="all", log_freq=100)
+            print(f"  Wandb: {wandb.run.name} ({wandb_project})")
+
         print(f"Trainer initialized:")
         print(f"  Device: {self.device}")
         print(f"  Learning rate: {self.config['learning_rate']}")
@@ -100,10 +135,13 @@ class Trainer:
         self.model.train()
         epoch_losses = []
         epoch_metrics = {}
+        epoch_start = time.time()
 
         pbar = tqdm(self.train_loader, desc=f"Epoch {self.epoch+1}/{self.config['epochs']}")
 
         for batch_idx, batch in enumerate(pbar):
+            batch_start = time.time()
+
             # Move to device
             x_context = batch["obs_context"].to(self.device)
             actions = batch["actions_rollout"].to(self.device)
@@ -131,8 +169,9 @@ class Trainer:
             loss.backward()
 
             # Gradient clipping
+            grad_norm = 0.0
             if self.config["grad_clip_norm"] > 0:
-                torch.nn.utils.clip_grad_norm_(
+                grad_norm = torch.nn.utils.clip_grad_norm_(
                     self.model.parameters(),
                     self.config["grad_clip_norm"]
                 )
@@ -149,6 +188,28 @@ class Trainer:
                     epoch_metrics[key] = []
                 epoch_metrics[key].append(value)
 
+            # Log to wandb every step
+            if self.use_wandb and batch_idx % 10 == 0:
+                batch_time = time.time() - batch_start
+                log_dict = {
+                    "train/loss": loss.item(),
+                    "train/grad_norm": grad_norm if isinstance(grad_norm, float) else grad_norm.item(),
+                    "train/learning_rate": self.optimizer.param_groups[0]["lr"],
+                    "train/batch_time": batch_time,
+                    "train/samples_per_sec": B / batch_time,
+                    "epoch": self.epoch,
+                }
+                # Add JEPA-specific metrics
+                for key, value in metrics.items():
+                    log_dict[f"train/{key}"] = value
+
+                # GPU metrics
+                if torch.cuda.is_available():
+                    log_dict["system/gpu_memory_allocated_gb"] = torch.cuda.memory_allocated() / 1024**3
+                    log_dict["system/gpu_memory_reserved_gb"] = torch.cuda.memory_reserved() / 1024**3
+
+                wandb.log(log_dict, step=self.global_step)
+
             # Update progress
             pbar.set_postfix({"loss": f"{loss.item():.4f}"})
             self.global_step += 1
@@ -157,6 +218,15 @@ class Trainer:
         avg_loss = sum(epoch_losses) / len(epoch_losses)
         for key in epoch_metrics:
             epoch_metrics[key] = sum(epoch_metrics[key]) / len(epoch_metrics[key])
+
+        # Log epoch summary to wandb
+        if self.use_wandb:
+            epoch_time = time.time() - epoch_start
+            wandb.log({
+                "train/epoch_loss": avg_loss,
+                "train/epoch_time_min": epoch_time / 60,
+                "epoch": self.epoch,
+            }, step=self.global_step)
 
         return avg_loss, epoch_metrics
 
@@ -197,6 +267,16 @@ class Trainer:
         for key in val_metrics:
             val_metrics[key] = sum(val_metrics[key]) / len(val_metrics[key])
 
+        # Log to wandb
+        if self.use_wandb:
+            log_dict = {
+                "val/loss": avg_loss,
+                "epoch": self.epoch,
+            }
+            for key, value in val_metrics.items():
+                log_dict[f"val/{key}"] = value
+            wandb.log(log_dict, step=self.global_step)
+
         return avg_loss, val_metrics
 
     def save_checkpoint(self, filename: str, is_best: bool = False):
@@ -216,6 +296,21 @@ class Trainer:
         path = self.checkpoint_dir / filename
         torch.save(checkpoint, path)
         print(f"Saved checkpoint: {path}")
+
+        # Save to wandb as artifact
+        if self.use_wandb:
+            artifact = wandb.Artifact(
+                name=f"model-{wandb.run.id}",
+                type="model",
+                metadata={
+                    "epoch": self.epoch,
+                    "train_loss": checkpoint["train_loss"],
+                    "val_loss": checkpoint["val_loss"],
+                    "is_best": is_best,
+                }
+            )
+            artifact.add_file(str(path))
+            wandb.log_artifact(artifact, aliases=["latest"] + (["best"] if is_best else []))
 
         if is_best:
             best_path = self.checkpoint_dir / "checkpoint_best.pth"
@@ -270,6 +365,16 @@ class Trainer:
         elapsed = time.time() - start_time
         print(f"\nTraining completed in {elapsed/60:.1f} minutes")
         print(f"Best validation loss: {self.best_val_loss:.4f}")
+
+        # Log final summary to wandb
+        if self.use_wandb:
+            wandb.log({
+                "train/final_loss": self.train_losses[-1],
+                "val/final_loss": self.val_losses[-1] if self.val_losses else float('nan'),
+                "val/best_loss": self.best_val_loss,
+                "system/total_training_time_min": elapsed / 60,
+            })
+            wandb.finish()
 
         return {
             "train_losses": self.train_losses,

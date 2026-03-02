@@ -25,6 +25,7 @@ dependencies = [
     "Pillow>=10.0.0",
     "tqdm>=4.66.0",
     "python-dateutil>=2.9.0.post0",
+    "wandb>=0.24.2",
 ]
 
 [project.optional-dependencies]

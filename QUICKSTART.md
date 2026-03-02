@@ -12,8 +12,13 @@ git pull origin main
 # 2. Quick setup (if not done already)
 bash scripts/quick_setup.sh
 
-# 3. Start training!
+# 3. Setup Weights & Biases (for monitoring)
+wandb login
+# Enter your API key from https://wandb.ai/authorize
+
+# 4. Start training!
 ./scripts/train_a100.sh data/manifest.jsonl
+# Wandb will print a URL to view real-time training metrics
 ```
 
 That's it! The script will:
@@ -31,6 +36,7 @@ End-to-end training connecting:
 - **Model** → WorldModel with MODEL.md v0.2 interfaces
 - **Trainer** → Fixed training loop with JEPA loss
 - **Checkpointing** → Saves every 5 epochs + best model
+- **Wandb monitoring** → Real-time metrics, GPU stats, model artifacts
 
 ### 2. Training Launcher (`scripts/train_a100.sh`)
 One-command training with automatic verification:
@@ -52,6 +58,11 @@ Verifies your training data:
 BATCH_SIZE=64 EPOCHS=100 ./scripts/train_a100.sh data/manifest.jsonl
 ```
 
+### Disable wandb:
+```bash
+USE_WANDB=false ./scripts/train_a100.sh data/manifest.jsonl
+```
+
 ### Manual training command:
 ```bash
 uv run python scripts/train.py \
@@ -60,8 +71,34 @@ uv run python scripts/train.py \
     --epochs 50 \
     --lr 1e-4 \
     --num-workers 16 \
-    --checkpoint-dir checkpoints
+    --checkpoint-dir checkpoints \
+    --wandb \
+    --wandb-project siad-world-model \
+    --wandb-name "my-experiment"
 ```
+
+## Monitoring Training
+
+Wandb provides real-time monitoring (enabled by default):
+
+**Tracked metrics:**
+- Loss curves (train & validation)
+- Learning rate schedule
+- Gradient norms
+- GPU memory usage
+- Training throughput (samples/sec)
+- Model gradients & parameters
+
+**View dashboard:** Wandb prints URL when training starts
+```
+🚀 View run at https://wandb.ai/username/siad-world-model/runs/abc123
+```
+
+**Full guide:** See `docs/WANDB_MONITORING.md` for:
+- Experiment comparison
+- Hyperparameter sweeps
+- Checkpoint artifact management
+- Custom metric logging
 
 ## What Was Fixed
 
