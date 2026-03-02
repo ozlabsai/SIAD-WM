@@ -207,7 +207,7 @@ dropout: {config.dropout}
         commit_message=commit_message,
         private=private,
         create_pr=False,
-        safe_serialization=True  # Use safetensors format
+        # Models use safetensors by default in newer transformers
     )
     
     # Also push config and model card
