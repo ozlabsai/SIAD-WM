@@ -140,6 +140,22 @@ class SIADDataset(Dataset):
             # Convert to float32
             arr = arr.astype(np.float32)
 
+            # Resize to exactly 256x256 if needed (handles slight size variations from EE exports)
+            if arr.shape[1] != 256 or arr.shape[2] != 256:
+                # Use simple resize (nearest neighbor for valid mask, bilinear for others)
+                from scipy.ndimage import zoom
+
+                h_scale = 256 / arr.shape[1]
+                w_scale = 256 / arr.shape[2]
+
+                resized = np.zeros((8, 256, 256), dtype=np.float32)
+                for c in range(8):
+                    # Use order=0 (nearest) for valid mask, order=1 (bilinear) for data
+                    order = 0 if c == 7 else 1  # Last channel is valid mask
+                    resized[c] = zoom(arr[c], (h_scale, w_scale), order=order)
+
+                arr = resized
+
             # Normalize to [0, 1] if requested
             if self.normalize:
                 # Handle potential NaN/inf values
