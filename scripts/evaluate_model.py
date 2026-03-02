@@ -162,6 +162,8 @@ def main():
     parser.add_argument("--num-samples", type=int, default=None, 
                        help="Number of samples to evaluate (default: all)")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--data-root", type=str, default=None,
+                       help="Root directory for data files (if paths in manifest are relative)")
     
     args = parser.parse_args()
     
@@ -182,7 +184,8 @@ def main():
         manifest_path=args.manifest,
         context_length=1,
         rollout_horizon=6,
-        normalize=True
+        normalize=True,
+        data_root=args.data_root
     )
     print(f"  Total samples: {len(dataset)}")
     
