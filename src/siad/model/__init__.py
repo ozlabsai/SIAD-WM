@@ -20,6 +20,9 @@ from .encoder import ContextEncoder, TargetEncoderEMA
 from .actions import ActionEncoder
 from .transition import TransitionModel
 
+# HuggingFace-compatible wrapper
+from .hf_model import SIADWorldModel, SIADConfig, WorldModelOutput
+
 __all__ = [
     "WorldModel",
     "create_world_model_from_config",
@@ -27,4 +30,7 @@ __all__ = [
     "TargetEncoderEMA",
     "ActionEncoder",
     "TransitionModel",
+    "SIADWorldModel",
+    "SIADConfig",
+    "WorldModelOutput",
 ]
