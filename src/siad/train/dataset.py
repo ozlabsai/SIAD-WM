@@ -210,6 +210,10 @@ class SIADDataset(Dataset):
         obs_targets = torch.from_numpy(obs_targets.copy())
         actions_rollout = torch.tensor(actions_rollout, dtype=torch.float32)  # [H, 2]
 
+        # If context_length=1, squeeze to [C, H, W] for single-image input
+        if self.context_length == 1:
+            obs_context = obs_context.squeeze(0)
+
         return {
             "obs_context": obs_context,
             "actions_rollout": actions_rollout,
