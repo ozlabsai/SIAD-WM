@@ -51,7 +51,7 @@ class SIADDataset(Dataset):
     def __init__(
         self,
         manifest_path: str,
-        context_length: int = 6,
+        context_length: int = 1,  # Changed to 1 for single-month context per MODEL.md
         rollout_horizon: int = 6,
         data_root: Optional[str] = None,
         normalize: bool = True
