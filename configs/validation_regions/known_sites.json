@@ -1,0 +1,27 @@
+{
+  "validation_regions": [
+    {
+      "site_name": "Industrial_Zone_Alpha",
+      "description": "Large industrial expansion with warehouse construction",
+      "construction_period": ["2023-03", "2023-08"],
+      "tile_ids": ["tile_x012_y034", "tile_x013_y034", "tile_x012_y035"]
+    },
+    {
+      "site_name": "Port_Expansion_Beta",
+      "description": "Port facility expansion with new container terminals",
+      "construction_period": ["2023-01", "2023-06"],
+      "tile_ids": ["tile_x020_y045"]
+    },
+    {
+      "site_name": "Highway_Interchange_Gamma",
+      "description": "Major highway interchange construction",
+      "construction_period": ["2022-11", "2023-05"],
+      "tile_ids": ["tile_x005_y010", "tile_x006_y010"]
+    }
+  ],
+  "notes": [
+    "These are example validation regions for backtesting.",
+    "Replace with actual known construction sites for target AOI.",
+    "Success criterion (SC-002): hit_rate >= 0.80"
+  ]
+}

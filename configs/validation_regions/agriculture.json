@@ -1,0 +1,43 @@
+{
+  "false_positive_regions": [
+    {
+      "region_name": "Rice_Paddies_North",
+      "land_cover": "agriculture",
+      "description": "Rice paddy fields with seasonal flooding cycles",
+      "tile_ids": [
+        "tile_x005_y020",
+        "tile_x006_y020",
+        "tile_x007_y020",
+        "tile_x005_y021",
+        "tile_x006_y021",
+        "tile_x007_y021"
+      ]
+    },
+    {
+      "region_name": "Wheat_Fields_East",
+      "land_cover": "agriculture",
+      "description": "Winter wheat fields with seasonal NDVI cycles",
+      "tile_ids": [
+        "tile_x030_y015",
+        "tile_x031_y015",
+        "tile_x032_y015"
+      ]
+    },
+    {
+      "region_name": "Monsoon_Floodplain_South",
+      "land_cover": "seasonal_water",
+      "description": "Seasonal floodplain with monsoon-driven inundation",
+      "tile_ids": [
+        "tile_x015_y050",
+        "tile_x016_y050",
+        "tile_x015_y051",
+        "tile_x016_y051"
+      ]
+    }
+  ],
+  "notes": [
+    "These are example false-positive test regions.",
+    "Replace with actual agriculture/seasonal regions for target AOI.",
+    "Success criterion (SC-003): fp_rate < 0.20 (excluding Environmental tier)"
+  ]
+}

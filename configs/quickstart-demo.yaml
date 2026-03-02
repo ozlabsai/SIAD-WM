@@ -1,0 +1,47 @@
+# SIAD Quickstart Demo Configuration
+# This config defines a small AOI in Libya for MVP development/testing
+
+aoi:
+  aoi_id: "quickstart-demo"
+  bounds:
+    min_lon: 12.0
+    max_lon: 12.5
+    min_lat: 34.0
+    max_lat: 34.5
+  projection: "EPSG:3857"  # Web Mercator
+  resolution_m: 10          # 10m spatial resolution
+  tile_size_px: 256         # 256x256 pixels per tile (2.56 km square)
+
+data:
+  gcs_bucket: "siad-exports"
+  export_path: "gs://siad-exports/siad/{aoi_id}"
+  start_month: "2021-01"
+  end_month: "2023-12"
+  sources:
+    - "s1"      # Sentinel-1 SAR
+    - "s2"      # Sentinel-2 optical
+    - "viirs"   # VIIRS nighttime lights
+    - "chirps"  # CHIRPS precipitation
+    - "era5"    # ERA5 temperature
+
+model:
+  latent_dim: 256
+  context_length: 6       # L=6 months of history
+  rollout_horizon: 6      # H=6 months of prediction
+  batch_size: 16
+  epochs: 50
+  learning_rate: 1.0e-4
+  seed: 42                # Random seed for reproducibility
+
+detection:
+  percentile_threshold: 99.0    # 99th percentile for anomaly detection
+  persistence_months: 2         # Require 2+ consecutive months
+  min_cluster_size: 3           # Cluster requires 3+ tiles
+  scenarios:
+    - "neutral"                 # No climate anomaly
+    - "observed"                # Actual climate conditions
+    # - "extreme_rain"          # Extreme rainfall scenario (post-MVP)
+
+validation:
+  backtest_regions: "configs/validation_regions/quickstart-demo.json"
+  fp_test_regions: "configs/validation_regions/fp_agriculture.json"

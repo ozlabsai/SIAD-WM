@@ -1,0 +1,43 @@
+# SIAD Test Export Configuration
+# Small test to validate export pipeline before full run
+
+aoi:
+  aoi_id: "test-export"
+  bounds:
+    # San Francisco Bay - we know this has good S1/S2 data
+    min_lon: -122.5
+    max_lon: -122.4  # ~10km × 10km area (more realistic)
+    min_lat: 37.7
+    max_lat: 37.8
+  projection: "EPSG:3857"
+  resolution_m: 10
+  tile_size_px: 256
+
+data:
+  gcp_project: "siad-earth-engine"
+  gcs_bucket: "siad-exports"
+  export_path: "gs://siad-exports/siad/{aoi_id}"
+  start_month: "2021-01"
+  end_month: "2023-12"  # 36 months (3 years) for robust training
+  sources:
+    - "s1"      # Sentinel-1 SAR
+    - "s2"      # Sentinel-2 optical
+    - "viirs"   # VIIRS nighttime lights
+    - "chirps"  # CHIRPS precipitation
+
+model:
+  latent_dim: 256
+  context_length: 6
+  rollout_horizon: 6
+  batch_size: 16
+  epochs: 50
+  learning_rate: 1.0e-4
+  seed: 42
+
+detection:
+  percentile_threshold: 99.0
+  persistence_months: 2
+  min_cluster_size: 3
+  scenarios:
+    - "neutral"
+    - "observed"

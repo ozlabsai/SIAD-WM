@@ -1,0 +1,125 @@
+# SIAD Configuration Schema Documentation
+# This file documents the expected structure of SIAD config files.
+# Actual validation is performed by Pydantic models in src/siad/config/schema.py
+
+# Root config structure
+root:
+  aoi: AOIConfig
+  data: DataConfig
+  model: ModelConfig
+  detection: DetectionConfig
+  validation: ValidationConfig  # Optional
+
+# AOI (Area of Interest) Configuration
+AOIConfig:
+  aoi_id:
+    type: string
+    required: true
+    description: "Unique identifier for the AOI (e.g., 'quickstart-demo')"
+  bounds:
+    type: object
+    required: true
+    description: "Geographic bounding box"
+    properties:
+      min_lon: {type: float, required: true}
+      max_lon: {type: float, required: true}
+      min_lat: {type: float, required: true}
+      max_lat: {type: float, required: true}
+  projection:
+    type: string
+    default: "EPSG:3857"
+    description: "Spatial projection (Web Mercator)"
+  resolution_m:
+    type: int
+    default: 10
+    description: "Spatial resolution in meters"
+  tile_size_px:
+    type: int
+    default: 256
+    description: "Tile size in pixels (256x256 = 2.56 km square at 10m resolution)"
+
+# Data Export/Loading Configuration
+DataConfig:
+  gcs_bucket:
+    type: string
+    default: "siad-exports"
+    description: "GCS bucket name for exports"
+  export_path:
+    type: string
+    default: "gs://siad-exports/siad/{aoi_id}"
+    description: "GCS path template (use {aoi_id} placeholder)"
+  start_month:
+    type: string
+    required: true
+    format: "YYYY-MM"
+    description: "Start month for data export (e.g., '2021-01')"
+  end_month:
+    type: string
+    required: true
+    format: "YYYY-MM"
+    description: "End month for data export (e.g., '2023-12')"
+  sources:
+    type: list[string]
+    default: ["s1", "s2", "viirs", "chirps", "era5"]
+    description: "Data sources to include"
+
+# Model Training Configuration
+ModelConfig:
+  latent_dim:
+    type: int
+    default: 256
+    description: "Latent space dimensionality"
+  context_length:
+    type: int
+    default: 6
+    description: "Number of history months (L)"
+  rollout_horizon:
+    type: int
+    default: 6
+    description: "Prediction horizon in months (H)"
+  batch_size:
+    type: int
+    default: 16
+    description: "Training batch size"
+  epochs:
+    type: int
+    default: 50
+    description: "Number of training epochs"
+  learning_rate:
+    type: float
+    default: 1.0e-4
+    description: "Adam optimizer learning rate"
+  seed:
+    type: int
+    default: 42
+    description: "Random seed for reproducibility"
+
+# Detection Configuration
+DetectionConfig:
+  percentile_threshold:
+    type: float
+    default: 99.0
+    description: "Percentile threshold for anomaly detection (0-100)"
+  persistence_months:
+    type: int
+    default: 2
+    description: "Minimum consecutive months above threshold"
+  min_cluster_size:
+    type: int
+    default: 3
+    description: "Minimum number of tiles in a cluster"
+  scenarios:
+    type: list[string]
+    default: ["neutral", "observed"]
+    description: "Counterfactual scenarios to compute"
+
+# Validation Configuration (Optional)
+ValidationConfig:
+  backtest_regions:
+    type: string
+    optional: true
+    description: "Path to JSON file with known construction regions"
+  fp_test_regions:
+    type: string
+    optional: true
+    description: "Path to JSON file with false-positive test regions (agriculture/monsoon)"

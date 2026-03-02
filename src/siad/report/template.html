@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIAD Report - {{ aoi_id }}</title>
+    <style>
+        /* Reset and base styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        /* Header */
+        header {
+            border-bottom: 3px solid #333;
+            padding-bottom: 20px;
+            margin-bottom: 40px;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .metadata {
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* Executive Summary */
+        .summary {
+            background: #f9f9f9;
+            padding: 20px;
+            border-left: 4px solid #1976D2;
+            margin-bottom: 40px;
+        }
+
+        .summary h2 {
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+
+        .summary table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .summary th,
+        .summary td {
+            padding: 8px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .summary th {
+            background: #e0e0e0;
+            font-weight: 600;
+        }
+
+        /* Confidence tier colors */
+        .tier-structural { color: #D32F2F; font-weight: 600; }
+        .tier-activity { color: #F57C00; font-weight: 600; }
+        .tier-environmental { color: #1976D2; font-weight: 600; }
+
+        /* AOI Map */
+        .aoi-map {
+            margin-bottom: 40px;
+            text-align: center;
+        }
+
+        .aoi-map h2 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .aoi-map img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+        }
+
+        /* Hotspot Cards */
+        .hotspot-card {
+            page-break-before: always;
+            margin-bottom: 60px;
+            padding-bottom: 40px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .hotspot-card:last-child {
+            border-bottom: none;
+        }
+
+        .hotspot-card h3 {
+            font-size: 22px;
+            margin-bottom: 10px;
+        }
+
+        .hotspot-metadata {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+
+        .metadata-item {
+            font-size: 14px;
+        }
+
+        .metadata-label {
+            font-weight: 600;
+            color: #666;
+        }
+
+        /* Before/After Panels */
+        .before-after {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .panel {
+            text-align: center;
+        }
+
+        .panel h4 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #555;
+        }
+
+        .panel img {
+            width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .modality-row {
+            margin-bottom: 20px;
+        }
+
+        .modality-label {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        /* Timeline */
+        .timeline {
+            margin-bottom: 30px;
+        }
+
+        .timeline h4 {
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+
+        .timeline img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+        }
+
+        /* Scenario Comparison */
+        .scenario-comparison {
+            margin-top: 60px;
+            page-break-before: always;
+        }
+
+        .scenario-comparison h2 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+
+        .scenario-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+        }
+
+        .scenario-panel {
+            text-align: center;
+        }
+
+        .scenario-panel h3 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #555;
+        }
+
+        .scenario-panel img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #ddd;
+        }
+
+        /* Attribution Chart */
+        .attribution {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 4px;
+        }
+
+        .attribution h4 {
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        /* Appendix */
+        .appendix {
+            margin-top: 60px;
+            page-break-before: always;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .appendix h2 {
+            font-size: 20px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        /* Print styles */
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+
+            .container {
+                box-shadow: none;
+                padding: 20px;
+            }
+
+            .hotspot-card {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>SIAD Infrastructure Acceleration Report</h1>
+            <div class="metadata">
+                <p><strong>AOI:</strong> {{ aoi_id }}</p>
+                <p><strong>Time Range:</strong> {{ start_month }} to {{ end_month }}</p>
+                <p><strong>Generated:</strong> {{ generation_timestamp }}</p>
+                <p><strong>Scenarios:</strong> {{ scenarios | join(', ') }}</p>
+            </div>
+        </header>
+
+        <!-- Executive Summary -->
+        <section class="summary">
+            <h2>Executive Summary</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Confidence Tier</th>
+                        <th>Hotspot Count</th>
+                        <th>Max Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="tier-structural">Structural</td>
+                        <td>{{ tier_counts.structural }}</td>
+                        <td>{{ tier_max_scores.structural | round(3) }}</td>
+                    </tr>
+                    <tr>
+                        <td class="tier-activity">Activity</td>
+                        <td>{{ tier_counts.activity }}</td>
+                        <td>{{ tier_max_scores.activity | round(3) }}</td>
+                    </tr>
+                    <tr>
+                        <td class="tier-environmental">Environmental</td>
+                        <td>{{ tier_counts.environmental }}</td>
+                        <td>{{ tier_max_scores.environmental | round(3) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <!-- AOI Overview Map -->
+        <section class="aoi-map">
+            <h2>Area of Interest Overview</h2>
+            <img src="data:image/png;base64,{{ aoi_map_base64 }}" alt="AOI Overview Map" />
+        </section>
+
+        <!-- Hotspot Catalog -->
+        <section class="hotspot-catalog">
+            <h2>Detected Hotspots (Ranked by Confidence)</h2>
+
+            {% for hotspot in hotspots_ranked %}
+            <div class="hotspot-card" id="{{ hotspot.hotspot_id }}">
+                <h3>
+                    {{ hotspot.hotspot_id }}
+                    <span class="tier-{{ hotspot.confidence_tier | lower }}">
+                        ({{ hotspot.confidence_tier }})
+                    </span>
+                </h3>
+
+                <!-- Metadata -->
+                <div class="hotspot-metadata">
+                    <div class="metadata-item">
+                        <span class="metadata-label">Location:</span>
+                        {{ hotspot.centroid.lat | round(4) }}°, {{ hotspot.centroid.lon | round(4) }}°
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">First Detected:</span>
+                        {{ hotspot.first_detected_month }}
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Persistence:</span>
+                        {{ hotspot.persistence_months }} months
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Max Score:</span>
+                        {{ hotspot.max_acceleration_score | round(3) }}
+                    </div>
+                    <div class="metadata-item">
+                        <span class="metadata-label">Tile Count:</span>
+                        {{ hotspot.tile_ids | length }}
+                    </div>
+                </div>
+
+                <!-- Before/After Panels -->
+                <div class="before-after-section">
+                    <!-- SAR Row -->
+                    <div class="modality-row">
+                        <div class="modality-label">SAR (Sentinel-1)</div>
+                        <div class="before-after">
+                            <div class="panel">
+                                <h4>Before ({{ hotspot.before_month }})</h4>
+                                <img src="data:image/jpeg;base64,{{ hotspot.thumbnails.s1_before_b64 }}" alt="SAR Before" />
+                            </div>
+                            <div class="panel">
+                                <h4>After ({{ hotspot.after_month }})</h4>
+                                <img src="data:image/jpeg;base64,{{ hotspot.thumbnails.s1_after_b64 }}" alt="SAR After" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Optical Row -->
+                    <div class="modality-row">
+                        <div class="modality-label">Optical (Sentinel-2)</div>
+                        <div class="before-after">
+                            <div class="panel">
+                                <h4>Before</h4>
+                                <img src="data:image/jpeg;base64,{{ hotspot.thumbnails.s2_before_b64 }}" alt="Optical Before" />
+                            </div>
+                            <div class="panel">
+                                <h4>After</h4>
+                                <img src="data:image/jpeg;base64,{{ hotspot.thumbnails.s2_after_b64 }}" alt="Optical After" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Lights Row -->
+                    <div class="modality-row">
+                        <div class="modality-label">Nighttime Lights (VIIRS)</div>
+                        <div class="before-after">
+                            <div class="panel">
+                                <h4>Before</h4>
+                                <img src="data:image/jpeg;base64,{{ hotspot.thumbnails.viirs_before_b64 }}" alt="Lights Before" />
+                            </div>
+                            <div class="panel">
+                                <h4>After</h4>
+                                <img src="data:image/jpeg;base64,{{ hotspot.thumbnails.viirs_after_b64 }}" alt="Lights After" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline -->
+                {% if hotspot.timeline_plot_b64 %}
+                <div class="timeline">
+                    <h4>Acceleration Timeline</h4>
+                    <img src="data:image/png;base64,{{ hotspot.timeline_plot_b64 }}" alt="Timeline Plot" />
+                </div>
+                {% endif %}
+
+                <!-- Attribution -->
+                <div class="attribution">
+                    <h4>Modality Attribution</h4>
+                    <p>
+                        SAR: {{ (hotspot.attribution.sar_contribution * 100) | round(1) }}% |
+                        Optical: {{ (hotspot.attribution.optical_contribution * 100) | round(1) }}% |
+                        Lights: {{ (hotspot.attribution.lights_contribution * 100) | round(1) }}%
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+        </section>
+
+        <!-- Scenario Comparison -->
+        {% if scenario_comparison %}
+        <section class="scenario-comparison">
+            <h2>Scenario Comparison</h2>
+            <div class="scenario-grid">
+                {% for scenario in scenario_comparison %}
+                <div class="scenario-panel">
+                    <h3>{{ scenario.name }}</h3>
+                    <img src="data:image/png;base64,{{ scenario.heatmap_b64 }}" alt="{{ scenario.name }} Heatmap" />
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- Appendix -->
+        <section class="appendix">
+            <h2>Appendix: Methodology</h2>
+            <p>
+                This report was generated by the SIAD (Strategic Infrastructure Acceleration Detector) pipeline.
+                Hotspots are identified by training a world model on multi-modal satellite time series and flagging
+                persistent deviations from counterfactual neutral-weather rollouts.
+            </p>
+            <h3>Confidence Tiers</h3>
+            <ul>
+                <li><strong class="tier-structural">Structural:</strong> SAR + lights changes consistent with construction</li>
+                <li><strong class="tier-activity">Activity:</strong> Lights changes with minimal SAR signature</li>
+                <li><strong class="tier-environmental">Environmental:</strong> Optical-dominated changes (likely vegetation/water)</li>
+            </ul>
+            <h3>Persistence Threshold</h3>
+            <p>All hotspots exceeded the 99th percentile acceleration score for ≥2 consecutive months.</p>
+        </section>
+    </div>
+</body>
+</html>
