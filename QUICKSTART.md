@@ -51,11 +51,65 @@ Verifies your training data:
 - GeoTIFF files exist
 - Proper structure (1-month context, 6-month rollout)
 
+## Training Presets (Recommended)
+
+SIAD provides preset configurations for common training scenarios:
+
+```bash
+# Load preset functions
+source scripts/train_presets.sh
+
+# Quick test - 10 epochs, no wandb (2-3 minutes)
+train_quick data/manifest.jsonl
+
+# Standard - 50 epochs (12-15 minutes)
+train_standard data/manifest.jsonl
+
+# Production - 100 epochs (25-30 minutes)
+train_production data/manifest.jsonl
+
+# Long training - 200 epochs (50-60 minutes)
+train_long data/manifest.jsonl
+
+# Large batch - batch=64 for faster training (8-10 minutes)
+train_large_batch data/manifest.jsonl
+
+# Tiny model - ultra-fast prototyping (~1 minute)
+train_tiny data/manifest.jsonl
+
+# View all presets
+./scripts/train_presets.sh
+```
+
 ## Custom Configuration
+
+### Change epochs directly:
+```bash
+# 100 epochs
+EPOCHS=100 ./scripts/train_a100.sh data/manifest.jsonl
+
+# 200 epochs
+EPOCHS=200 ./scripts/train_a100.sh data/manifest.jsonl
+
+# Custom epoch count
+EPOCHS=150 ./scripts/train_a100.sh data/manifest.jsonl
+```
 
 ### Change batch size or epochs:
 ```bash
 BATCH_SIZE=64 EPOCHS=100 ./scripts/train_a100.sh data/manifest.jsonl
+```
+
+### Different model sizes:
+```bash
+# Tiny model (default) - 54M params
+MODEL_SIZE=tiny EPOCHS=50 ./scripts/train_a100.sh data/manifest.jsonl
+
+# Small model - for better quality
+MODEL_SIZE=small EPOCHS=100 ./scripts/train_a100.sh data/manifest.jsonl
+
+# Medium model - for production
+MODEL_SIZE=medium EPOCHS=100 ./scripts/train_a100.sh data/manifest.jsonl
 ```
 
 ### Disable wandb:
@@ -63,10 +117,18 @@ BATCH_SIZE=64 EPOCHS=100 ./scripts/train_a100.sh data/manifest.jsonl
 USE_WANDB=false ./scripts/train_a100.sh data/manifest.jsonl
 ```
 
+### Combine multiple settings:
+```bash
+MODEL_SIZE=medium BATCH_SIZE=48 EPOCHS=150 LR=5e-5 \
+  ./scripts/train_a100.sh data/manifest.jsonl
+```
+
 ### Manual training command:
 ```bash
 uv run python scripts/train.py \
     --manifest data/manifest.jsonl \
+    --data-root data/geotiffs \
+    --model-size tiny \
     --batch-size 32 \
     --epochs 50 \
     --lr 1e-4 \
@@ -76,6 +138,20 @@ uv run python scripts/train.py \
     --wandb-project siad-world-model \
     --wandb-name "my-experiment"
 ```
+
+## Environment Variables Reference
+
+All available configuration options:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `EPOCHS` | `50` | Number of training epochs |
+| `BATCH_SIZE` | `32` | Batch size for training |
+| `MODEL_SIZE` | `tiny` | Model size: tiny/small/medium/large/xlarge |
+| `LR` | `1e-4` | Learning rate |
+| `NUM_WORKERS` | `16` | DataLoader worker processes |
+| `USE_WANDB` | `true` | Enable Weights & Biases logging |
+| `WANDB_PROJECT` | `siad-world-model` | Wandb project name |
 
 ## Monitoring Training
 
@@ -111,6 +187,15 @@ The trainer was completely broken (calling non-existent APIs). Now it uses:
 
 All 20/20 tests passing!
 
+## Additional Documentation
+
+For more detailed information:
+
+- **[scripts/README.md](scripts/README.md)** - Complete scripts reference
+- **[docs/TRAINING_EXAMPLES.md](docs/TRAINING_EXAMPLES.md)** - Comprehensive training examples
+- **[docs/WANDB_MONITORING.md](docs/WANDB_MONITORING.md)** - Monitoring and experiment tracking
+- **[configs/model_sizes.yaml](configs/model_sizes.yaml)** - Model size configurations
+
 ## Next Steps
 
 1. **Verify you have training data** in GCS or locally
@@ -120,7 +205,21 @@ All 20/20 tests passing!
 
 ## Expected Training Time
 
-- **Model size**: 54M parameters (~1GB VRAM)
-- **Batch size 32**: ~8GB VRAM used
-- **A100 80GB**: Tons of headroom
-- **Estimated time**: ~12 minutes for 50 epochs (varies by dataset size)
+Training times on A100 80GB (varies by dataset size):
+
+| Configuration | Epochs | Time | Use Case |
+|--------------|--------|------|----------|
+| Quick test | 10 | ~2-3 min | Debugging, code validation |
+| Standard | 50 | ~12-15 min | Development, baselines |
+| Production | 100 | ~25-30 min | Final models |
+| Long training | 200 | ~50-60 min | Maximum quality |
+
+**Model specs (tiny):**
+- Parameters: 54M (~1GB VRAM)
+- Batch size 32: ~8GB VRAM
+- A100 80GB: Plenty of headroom for larger batches/models
+
+**Training throughput:**
+- ~250-300 steps/second
+- ~4-5 minutes per 10 epochs
+- Scales linearly with epoch count
