@@ -61,7 +61,9 @@ def create_manifest(data_dir: str, output_path: str, min_months: int = 12):
     for tif_path in data_dir.rglob("*.tif"):
         tile_id, month = extract_tile_month(tif_path)
         if tile_id and month:
-            tile_data[tile_id].append((month, str(tif_path)))
+            # Store path relative to data_dir
+            rel_path = tif_path.relative_to(data_dir)
+            tile_data[tile_id].append((month, str(rel_path)))
 
     print(f"Found {len(tile_data)} unique tiles")
 
