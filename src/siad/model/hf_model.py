@@ -87,6 +87,7 @@ class SIADWorldModel(PreTrainedModel):
         super().__init__(config)
         
         # Create core WorldModel
+        # Note: WorldModel handles EMA internally, doesn't take ema_* params in __init__
         self.model = WorldModel(
             in_channels=config.in_channels,
             latent_dim=config.latent_dim,
@@ -97,9 +98,7 @@ class SIADWorldModel(PreTrainedModel):
             transition_blocks=config.transition_blocks,
             transition_heads=config.transition_heads,
             transition_mlp_dim=config.transition_mlp_dim,
-            dropout=config.dropout,
-            ema_decay=config.ema_decay,
-            ema_warmup_steps=config.ema_warmup_steps
+            dropout=config.dropout
         )
         
         # For HF compatibility
