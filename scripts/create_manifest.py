@@ -14,14 +14,27 @@ from collections import defaultdict
 import re
 
 
-def extract_tile_month(filename: str):
-    """Extract tile_id and month from filename
+def extract_tile_month(filepath: Path):
+    """Extract tile_id and month from filepath
 
-    Expected format: tile_x000_y001_2023-05.tif
+    Handles two formats:
+    1. Subdirectory: tile_x000_y001/2023-05.tif
+    2. Flat: tile_x000_y001_2023-05.tif
     """
+    filename = filepath.name
+    parent = filepath.parent.name
+
+    # Try subdirectory format first (tile_id as parent directory)
+    if re.match(r'tile_x\d+_y\d+', parent):
+        month_match = re.match(r'(\d{4}-\d{2})\.tif', filename)
+        if month_match:
+            return parent, month_match.group(1)
+
+    # Try flat format (tile_id in filename)
     match = re.match(r'(tile_x\d+_y\d+)_(\d{4}-\d{2})\.tif', filename)
     if match:
         return match.group(1), match.group(2)
+
     return None, None
 
 
@@ -41,12 +54,12 @@ def create_manifest(data_dir: str, output_path: str, min_months: int = 12):
         print(f"   gsutil -m rsync -r gs://siad-exports/test-export {data_dir}")
         return
 
-    # Scan all GeoTIFFs
+    # Scan all GeoTIFFs (recursively)
     print(f"Scanning {data_dir} for GeoTIFF files...")
     tile_data = defaultdict(list)
 
-    for tif_path in data_dir.glob("*.tif"):
-        tile_id, month = extract_tile_month(tif_path.name)
+    for tif_path in data_dir.rglob("*.tif"):
+        tile_id, month = extract_tile_month(tif_path)
         if tile_id and month:
             tile_data[tile_id].append((month, str(tif_path)))
 
