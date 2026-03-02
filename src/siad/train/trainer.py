@@ -159,7 +159,9 @@ class Trainer:
             B, H_batch, C, Hp, Wp = x_targets.shape
             x_targets_flat = x_targets.view(B * H_batch, C, Hp, Wp)
             z_target_flat = self.model.encode_targets(x_targets_flat)
-            z_target = z_target_flat.view(B, H_batch, 256, 512)
+            # Get actual latent dim from model (not hardcoded 512)
+            latent_dim = self.model.latent_dim
+            z_target = z_target_flat.view(B, H_batch, 256, latent_dim)
 
             # 4. Compute loss
             loss, metrics = compute_jepa_world_model_loss(z_pred, z_target)
@@ -252,7 +254,9 @@ class Trainer:
             B, H, C, Hp, Wp = x_targets.shape
             x_targets_flat = x_targets.view(B * H, C, Hp, Wp)
             z_target_flat = self.model.encode_targets(x_targets_flat)
-            z_target = z_target_flat.view(B, H, 256, 512)
+            # Get actual latent dim from model (not hardcoded 512)
+            latent_dim = self.model.latent_dim
+            z_target = z_target_flat.view(B, H, 256, latent_dim)
 
             loss, metrics = compute_jepa_world_model_loss(z_pred, z_target)
 
