@@ -12,6 +12,7 @@ import torch
 from torch.utils.data import DataLoader
 from pathlib import Path
 import argparse
+import yaml
 
 from siad.model import WorldModel
 from siad.train.dataset import SIADDataset
@@ -22,6 +23,9 @@ def main():
     parser = argparse.ArgumentParser(description="Train SIAD World Model")
     parser.add_argument("--manifest", type=str, required=True, help="Path to manifest.jsonl")
     parser.add_argument("--data-root", type=str, default=None, help="Root directory for data files")
+    parser.add_argument("--model-size", type=str, default="tiny",
+                       choices=["tiny", "small", "medium", "large", "xlarge"],
+                       help="Model size from configs/model_sizes.yaml")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument("--epochs", type=int, default=50, help="Number of epochs")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
@@ -81,19 +85,20 @@ def main():
         pin_memory=True
     )
 
-    # Create model
-    print("\nCreating model...")
+    # Load model configuration
+    config_path = Path(__file__).parent.parent / "configs" / "model_sizes.yaml"
+    with open(config_path) as f:
+        model_configs = yaml.safe_load(f)
+
+    model_config = model_configs[args.model_size]
+    print(f"\nCreating '{args.model_size}' model...")
+    print(f"  Config: {config_path}")
+
+    # Create model from config
     model = WorldModel(
         in_channels=8,
-        latent_dim=512,
         action_dim=2,  # rain + temp anomalies
-        encoder_blocks=4,
-        encoder_heads=8,
-        encoder_mlp_dim=2048,
-        transition_blocks=6,
-        transition_heads=8,
-        transition_mlp_dim=2048,
-        dropout=0.1
+        **model_config
     )
 
     params = sum(p.numel() for p in model.parameters())
