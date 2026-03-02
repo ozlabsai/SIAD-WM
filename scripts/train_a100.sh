@@ -42,41 +42,48 @@ echo -e "\n5. Checking data access..."
 uv run python -c "from google.cloud import storage; client = storage.Client(); print('✓ GCS authenticated')"
 
 # Parse arguments
-CONFIG="${1:-configs/train_a100.yaml}"
-BATCH_SIZE="${2:-32}"
-EPOCHS="${3:-50}"
+MANIFEST="${1:-data/manifest.jsonl}"
+BATCH_SIZE="${BATCH_SIZE:-32}"
+EPOCHS="${EPOCHS:-50}"
+LR="${LR:-1e-4}"
+NUM_WORKERS="${NUM_WORKERS:-16}"
 
 echo -e "\n6. Training configuration:"
-echo "  Config:     $CONFIG"
-echo "  Batch size: $BATCH_SIZE"
-echo "  Epochs:     $EPOCHS"
+echo "  Manifest:    $MANIFEST"
+echo "  Batch size:  $BATCH_SIZE"
+echo "  Epochs:      $EPOCHS"
+echo "  Learning rate: $LR"
+echo "  Workers:     $NUM_WORKERS"
 
-# Confirm
-read -p "Start training? (y/n) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Training cancelled."
-    exit 0
+# Check training data
+echo -e "\n7. Checking training data..."
+if [ -f "$MANIFEST" ]; then
+    uv run python scripts/check_training_data.py --manifest "$MANIFEST"
+else
+    echo "⚠️  Warning: Manifest not found at $MANIFEST"
+    echo "   Specify manifest path as first argument"
+    read -p "Continue anyway? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Training cancelled."
+        exit 0
+    fi
 fi
 
 # Start training
-echo -e "\n7. Starting training..."
+echo -e "\n8. Starting training..."
 echo "========================================="
 
-# Run training (will be implemented when trainer.py is updated)
-# For now, this is a placeholder
-echo "Note: Training command will be available after trainer.py is updated to use new MODEL.md interfaces"
-echo ""
-echo "Command will be:"
-echo "  uv run siad train --config $CONFIG --batch_size $BATCH_SIZE --epochs $EPOCHS"
-
-# TODO: Uncomment when trainer is ready
-# uv run siad train \
-#   --config "$CONFIG" \
-#   --batch_size "$BATCH_SIZE" \
-#   --epochs "$EPOCHS"
+uv run python scripts/train.py \
+    --manifest "$MANIFEST" \
+    --batch-size "$BATCH_SIZE" \
+    --epochs "$EPOCHS" \
+    --lr "$LR" \
+    --num-workers "$NUM_WORKERS" \
+    --checkpoint-dir checkpoints
 
 echo ""
 echo "========================================="
-echo "Setup complete! GPU ready for training."
+echo "Training complete!"
+echo "Checkpoints saved to: checkpoints/"
 echo "========================================="
