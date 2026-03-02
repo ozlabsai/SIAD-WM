@@ -28,10 +28,16 @@ def create_model_card(
     model_size: str,
     model_config: dict,
     training_info: dict,
-    checkpoint_path: Path
+    checkpoint_path: Path,
+    repo_name: str = None
 ) -> str:
     """Generate model card markdown"""
-    repo_name = f"{model_name}-{model_size}"
+    if repo_name is None:
+        # If model_name already contains the size, don't append it again
+        if model_name.endswith(f"-{model_size}"):
+            repo_name = model_name
+        else:
+            repo_name = f"{model_name}-{model_size}"
 
     # Count parameters
     model = WorldModel(
@@ -189,8 +195,14 @@ def upload_model(
     if 'best_val_loss' in checkpoint:
         training_info['best_val_loss'] = checkpoint['best_val_loss']
 
-    # Create repo
-    repo_id = f"{hf_username}/{model_name}-{model_size}"
+    # Create repo ID
+    # If model_name already contains the size, don't append it again
+    if model_name.endswith(f"-{model_size}"):
+        repo_name = model_name
+    else:
+        repo_name = f"{model_name}-{model_size}"
+
+    repo_id = f"{hf_username}/{repo_name}"
 
     print(f"\nUploading to: {repo_id}")
 
@@ -224,7 +236,7 @@ def upload_model(
         with open(card_path, 'w') as f:
             f.write(create_model_card(
                 model_name, model_size, model_config,
-                training_info, checkpoint_path
+                training_info, checkpoint_path, repo_name=repo_name
             ))
 
         # Upload
