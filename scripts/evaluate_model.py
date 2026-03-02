@@ -45,7 +45,7 @@ def load_model_from_checkpoint(checkpoint_path: str, device: str = "cuda"):
     
     model.load_state_dict(checkpoint['model_state_dict'])
     model.to(device)
-    model.inference_mode()
+    model.eval()  # Set to evaluation mode
     
     return model, checkpoint
 
