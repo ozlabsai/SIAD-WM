@@ -3,12 +3,12 @@
 
 Usage:
     # From HuggingFace Hub:
-    python scripts/demo_hf_model.py \
+    uv run python scripts/demo_hf_model.py \
         --repo-id username/siad-tiny \
         --sample data/manifest.jsonl
-    
+
     # From local directory:
-    python scripts/demo_hf_model.py \
+    uv run python scripts/demo_hf_model.py \
         --local-path ./saved_model \
         --sample data/manifest.jsonl
 """

@@ -8,7 +8,7 @@ This creates a proper HuggingFace model repository with:
 - Compatible with HF AutoModel
 
 Usage:
-    python scripts/upload_to_hf_new.py \
+    uv run python scripts/upload_to_hf_new.py \
         --checkpoint checkpoints/checkpoint_final.pth \
         --model-size tiny \
         --repo-id username/siad-tiny
