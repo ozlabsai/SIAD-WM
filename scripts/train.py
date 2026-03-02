@@ -48,7 +48,7 @@ def main():
     print(f"\nLoading dataset from: {args.manifest}")
     dataset = SIADDataset(
         manifest_path=args.manifest,
-        context_length=6,
+        context_length=1,  # Single-month context per MODEL.md
         rollout_horizon=6,
         data_root=args.data_root,
         normalize=True
