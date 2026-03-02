@@ -1,21 +1,30 @@
 """SIAD World Model Components
 
+Per MODEL.md v0.2 - JEPA-centered token-based world model
+
 Exports:
-    - WorldModel: Main action-conditioned world model
-    - ObsEncoder: Observation encoder (ResNet18-based)
-    - TargetEncoder: EMA-stabilized target encoder
-    - ActionEncoder: Action (rain/temp anomaly) encoder
-    - TransitionModel: Dynamics model (Transformer)
+    - WorldModel: Main JEPA world model (from wm.py)
+    - ContextEncoder: Context encoder f_θ (from encoder.py)
+    - TargetEncoderEMA: Target encoder f_θ̄ with EMA (from encoder.py)
+    - ActionEncoder: Action encoder h_φ (from actions.py)
+    - TransitionModel: Transition model F_ψ (from transition.py)
+    - create_world_model_from_config: Factory function for config-driven instantiation
+
+Legacy components (deprecated, use for backward compatibility only):
+    - Available in siad.model.legacy.*
 """
 
-from .world_model import WorldModel
-from .encoders import ObsEncoder, TargetEncoder, ActionEncoder
-from .dynamics import TransitionModel
+# New MODEL.md v0.2 compliant implementation
+from .wm import WorldModel, create_world_model_from_config
+from .encoder import ContextEncoder, TargetEncoderEMA
+from .actions import ActionEncoder
+from .transition import TransitionModel
 
 __all__ = [
     "WorldModel",
-    "ObsEncoder",
-    "TargetEncoder",
+    "create_world_model_from_config",
+    "ContextEncoder",
+    "TargetEncoderEMA",
     "ActionEncoder",
     "TransitionModel",
 ]

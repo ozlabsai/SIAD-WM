@@ -1,0 +1,104 @@
+# Training Configuration for A100 80GB SXM
+# Optimized for fast training with large batches
+
+data:
+  dataset: "gcs://siad-training-data"
+  train_split: 0.8
+  val_split: 0.2
+  num_workers: 16          # A100 servers have many CPU cores
+  pin_memory: true         # Faster CPU->GPU transfer
+  persistent_workers: true # Keep workers alive between epochs
+  prefetch_factor: 4       # Prefetch 4 batches per worker
+
+training:
+  # Batch size optimized for A100 80GB
+  batch_size: 32           # Can go up to 64 if dataset allows
+  epochs: 50
+
+  # Optimization
+  learning_rate: 1.0e-4
+  weight_decay: 1.0e-5
+  grad_clip_norm: 1.0
+
+  # Mixed precision (fp16/bf16)
+  mixed_precision: "bf16"  # BFloat16 is better on A100
+
+  # No gradient accumulation needed with large batches
+  gradient_accumulation_steps: 1
+
+  # Scheduler
+  scheduler: "cosine"
+  warmup_steps: 500
+
+  # EMA for target encoder
+  ema_momentum: 0.996
+
+  # Checkpointing
+  save_every: 5            # Save every 5 epochs
+  checkpoint_dir: "checkpoints/a100_run"
+  keep_last_n: 3           # Keep only last 3 checkpoints
+
+  # Logging
+  log_every: 10            # Log every 10 steps
+  use_wandb: false         # Set to true if using Weights & Biases
+
+  # Reproducibility
+  seed: 42
+
+model:
+  # Architecture (per MODEL.md)
+  in_channels: 8
+  latent_dim: 512
+  action_dim: 1
+
+  # Encoder
+  encoder_blocks: 4
+  encoder_heads: 8
+  encoder_mlp_dim: 2048
+
+  # Transition
+  transition_blocks: 6
+  transition_heads: 8
+  transition_mlp_dim: 2048
+
+  # EMA target encoder
+  tau_start: 0.99
+  tau_end: 0.995
+  warmup_steps: 2000
+
+  # Action conditioning
+  use_film: true
+  use_action_token: true
+
+  # Regularization
+  dropout: 0.1             # Slightly higher for large batches
+
+loss:
+  type: "cosine"           # Cosine JEPA loss per MODEL.md
+  anti_collapse: true
+  anti_collapse_weight: 0.1
+  min_std: 0.1
+
+  # Step weights (optional, uniform by default)
+  step_weights: null       # Can set [1.0, 1.0, 1.0, 1.0, 1.0, 1.0] for H=6
+
+rollout:
+  horizon: 6               # Predict 6 months ahead
+  context_length: 1        # Use 1 month context
+
+# Data preprocessing
+preprocessing:
+  normalize: true
+  band_order_version: "v1"
+
+# A100-specific optimizations
+cuda:
+  # Enable TensorFloat-32 for ~5x speedup on A100
+  allow_tf32: true
+
+  # cuDNN settings
+  cudnn_benchmark: true    # Auto-tune convolutions
+  cudnn_deterministic: false  # Faster but not reproducible
+
+  # Memory
+  empty_cache_every: 10    # Clear cache every 10 epochs if needed
