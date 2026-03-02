@@ -189,9 +189,9 @@ class SIADDataset(Dataset):
         obs_context = np.stack([self._load_geotiff(p) for p in obs_context_paths])  # [L, C, H, W]
         obs_targets = np.stack([self._load_geotiff(p) for p in obs_targets_paths])  # [H, C, H, W]
 
-        # Convert to tensors
-        obs_context = torch.from_numpy(obs_context)
-        obs_targets = torch.from_numpy(obs_targets)
+        # Convert to tensors (use .copy() to ensure tensors are contiguous and can be batched)
+        obs_context = torch.from_numpy(obs_context.copy())
+        obs_targets = torch.from_numpy(obs_targets.copy())
         actions_rollout = torch.tensor(actions_rollout, dtype=torch.float32)  # [H, 2]
 
         return {
