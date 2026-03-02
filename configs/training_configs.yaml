@@ -1,0 +1,41 @@
+# Training configurations for experimentation
+
+baseline:
+  # Current baseline - what you just trained
+  context_length: 1
+  rollout_horizon: 6
+  batch_size: 32
+  epochs: 50
+  learning_rate: 1e-4
+
+longer_context:
+  # 3-month context for better temporal understanding
+  context_length: 3
+  rollout_horizon: 6
+  batch_size: 24  # Reduce batch size (larger memory per sample)
+  epochs: 50
+  learning_rate: 1e-4
+
+temporal_expert:
+  # 6-month context for maximum temporal awareness
+  context_length: 6
+  rollout_horizon: 6
+  batch_size: 16  # Further reduced batch size
+  epochs: 50
+  learning_rate: 1e-4
+
+quick_prototype:
+  # Fast iteration for testing
+  context_length: 1
+  rollout_horizon: 6
+  batch_size: 32
+  epochs: 10  # Quick test
+  learning_rate: 1e-4
+
+production:
+  # Production-quality training
+  context_length: 3
+  rollout_horizon: 12  # Predict full year
+  batch_size: 24
+  epochs: 100
+  learning_rate: 5e-5  # Lower LR for longer training
