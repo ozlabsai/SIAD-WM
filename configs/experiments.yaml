@@ -1,0 +1,266 @@
+# Preset Experiment Suites for SIAD World Model
+#
+# Use with: uv run scripts/run_experiments.py --suite <suite_name>
+#
+# Each suite defines a list of experiments with different configurations.
+# Experiments run sequentially by default, or in parallel with --parallel flag.
+
+# -----------------------------------------------------------------------------
+# Baseline: Current working setup validation
+# -----------------------------------------------------------------------------
+baseline:
+  description: "Validate current baseline configuration works end-to-end"
+  total_estimated_time_minutes: 9
+  experiments:
+    - name: "baseline_tiny_single"
+      model_size: tiny
+      context_length: 1
+      batch_size: 32
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-baseline
+
+# -----------------------------------------------------------------------------
+# Scaling: Test different model sizes on same data
+# -----------------------------------------------------------------------------
+scaling:
+  description: "Compare model capacity scaling: tiny -> small -> medium"
+  total_estimated_time_minutes: 74  # 9 + 20 + 45
+  experiments:
+    - name: "scaling_tiny"
+      model_size: tiny
+      context_length: 1
+      batch_size: 32
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-scaling
+
+    - name: "scaling_small"
+      model_size: small
+      context_length: 1
+      batch_size: 32
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-scaling
+
+    - name: "scaling_medium"
+      model_size: medium
+      context_length: 1
+      batch_size: 24  # Reduced for larger model
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-scaling
+
+# -----------------------------------------------------------------------------
+# Temporal: Test different context lengths on medium model
+# -----------------------------------------------------------------------------
+temporal:
+  description: "Compare temporal context: 1-month vs 3-month vs 6-month"
+  total_estimated_time_minutes: 157  # 45 + 56 + 56
+  experiments:
+    - name: "temporal_ctx1"
+      model_size: medium
+      context_length: 1
+      batch_size: 24
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-temporal
+
+    - name: "temporal_ctx3"
+      model_size: medium
+      context_length: 3
+      batch_size: 20  # Reduced batch size for larger memory
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-temporal
+
+    - name: "temporal_ctx6"
+      model_size: medium
+      context_length: 6
+      batch_size: 16  # Further reduced for 6-month context
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-temporal
+
+# -----------------------------------------------------------------------------
+# Production: Best configuration for deployment
+# -----------------------------------------------------------------------------
+production:
+  description: "Production-quality training with best hyperparameters"
+  total_estimated_time_minutes: 180  # 90 minutes for 100 epochs
+  experiments:
+    - name: "production_medium_100ep"
+      model_size: medium
+      context_length: 3  # Better temporal understanding
+      batch_size: 20
+      epochs: 100  # More training
+      learning_rate: 5.0e-5  # Lower LR for longer training
+      num_workers: 16
+      wandb_project: siad-production
+
+    # Optional: large model for best quality
+    # - name: "production_large_100ep"
+    #   model_size: large
+    #   context_length: 3
+    #   batch_size: 16
+    #   epochs: 100
+    #   learning_rate: 5.0e-5
+    #   num_workers: 16
+    #   wandb_project: siad-production
+
+# -----------------------------------------------------------------------------
+# Ablation: Systematic parameter sweep
+# -----------------------------------------------------------------------------
+ablation:
+  description: "Systematic ablation study of key hyperparameters"
+  total_estimated_time_minutes: 360  # ~6 hours for comprehensive sweep
+  experiments:
+    # Baseline
+    - name: "ablation_baseline"
+      model_size: small
+      context_length: 1
+      batch_size: 32
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-ablation
+
+    # Learning rate sweep
+    - name: "ablation_lr_high"
+      model_size: small
+      context_length: 1
+      batch_size: 32
+      epochs: 50
+      learning_rate: 5.0e-4  # 5x higher
+      num_workers: 16
+      wandb_project: siad-ablation
+
+    - name: "ablation_lr_low"
+      model_size: small
+      context_length: 1
+      batch_size: 32
+      epochs: 50
+      learning_rate: 5.0e-5  # 2x lower
+      num_workers: 16
+      wandb_project: siad-ablation
+
+    # Batch size sweep
+    - name: "ablation_bs_large"
+      model_size: small
+      context_length: 1
+      batch_size: 64  # 2x larger
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-ablation
+
+    - name: "ablation_bs_small"
+      model_size: small
+      context_length: 1
+      batch_size: 16  # 2x smaller
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-ablation
+
+    # Context length sweep
+    - name: "ablation_ctx3"
+      model_size: small
+      context_length: 3
+      batch_size: 24
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-ablation
+
+    - name: "ablation_ctx6"
+      model_size: small
+      context_length: 6
+      batch_size: 16
+      epochs: 50
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-ablation
+
+    # Longer training
+    - name: "ablation_epochs100"
+      model_size: small
+      context_length: 1
+      batch_size: 32
+      epochs: 100
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-ablation
+
+    - name: "ablation_epochs200"
+      model_size: small
+      context_length: 1
+      batch_size: 32
+      epochs: 200
+      learning_rate: 5.0e-5  # Lower LR for longer training
+      num_workers: 16
+      wandb_project: siad-ablation
+
+# -----------------------------------------------------------------------------
+# Quick Test: Fast iteration for debugging
+# -----------------------------------------------------------------------------
+quick_test:
+  description: "Quick smoke test with minimal epochs"
+  total_estimated_time_minutes: 2
+  experiments:
+    - name: "quick_test_tiny"
+      model_size: tiny
+      context_length: 1
+      batch_size: 32
+      epochs: 10  # Fast test
+      learning_rate: 1.0e-4
+      num_workers: 16
+      wandb_project: siad-quick-test
+
+# -----------------------------------------------------------------------------
+# Full Sweep: Comprehensive experiment grid (WARNING: Very long!)
+# -----------------------------------------------------------------------------
+full_sweep:
+  description: "Comprehensive grid search across all dimensions (WARNING: >24 hours)"
+  total_estimated_time_minutes: 1500  # ~25 hours
+  experiments:
+    # Tiny model variants
+    - {model_size: tiny, context_length: 1, batch_size: 32, epochs: 50, learning_rate: 1.0e-4, num_workers: 16, wandb_project: siad-full-sweep}
+    - {model_size: tiny, context_length: 3, batch_size: 24, epochs: 50, learning_rate: 1.0e-4, num_workers: 16, wandb_project: siad-full-sweep}
+    - {model_size: tiny, context_length: 6, batch_size: 16, epochs: 50, learning_rate: 1.0e-4, num_workers: 16, wandb_project: siad-full-sweep}
+
+    # Small model variants
+    - {model_size: small, context_length: 1, batch_size: 32, epochs: 50, learning_rate: 1.0e-4, num_workers: 16, wandb_project: siad-full-sweep}
+    - {model_size: small, context_length: 3, batch_size: 24, epochs: 50, learning_rate: 1.0e-4, num_workers: 16, wandb_project: siad-full-sweep}
+    - {model_size: small, context_length: 6, batch_size: 16, epochs: 50, learning_rate: 1.0e-4, num_workers: 16, wandb_project: siad-full-sweep}
+
+    # Medium model variants
+    - {model_size: medium, context_length: 1, batch_size: 24, epochs: 50, learning_rate: 1.0e-4, num_workers: 16, wandb_project: siad-full-sweep}
+    - {model_size: medium, context_length: 3, batch_size: 20, epochs: 50, learning_rate: 1.0e-4, num_workers: 16, wandb_project: siad-full-sweep}
+    - {model_size: medium, context_length: 6, batch_size: 16, epochs: 50, learning_rate: 1.0e-4, num_workers: 16, wandb_project: siad-full-sweep}
+
+    # Extended training variants
+    - {model_size: small, context_length: 1, batch_size: 32, epochs: 100, learning_rate: 5.0e-5, num_workers: 16, wandb_project: siad-full-sweep}
+    - {model_size: medium, context_length: 3, batch_size: 20, epochs: 100, learning_rate: 5.0e-5, num_workers: 16, wandb_project: siad-full-sweep}
+
+    # Long training variants
+    - {model_size: small, context_length: 1, batch_size: 32, epochs: 200, learning_rate: 5.0e-5, num_workers: 16, wandb_project: siad-full-sweep}
+    - {model_size: medium, context_length: 3, batch_size: 20, epochs: 200, learning_rate: 5.0e-5, num_workers: 16, wandb_project: siad-full-sweep}
+
+# -----------------------------------------------------------------------------
+# Notes:
+# -----------------------------------------------------------------------------
+# - All experiments use wandb for tracking (project name varies by suite)
+# - Time estimates assume A100 GPU (scale proportionally for other GPUs)
+# - Batch sizes are tuned to fit in ~40GB VRAM
+# - Learning rates follow standard scaling rules
+# - Context length affects memory: reduce batch_size accordingly
+# - Use --resume flag to skip completed experiments
+# - Use --dry-run to preview commands without running

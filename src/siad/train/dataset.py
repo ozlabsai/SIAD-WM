@@ -1,6 +1,7 @@
 """PyTorch Dataset for SIAD World Model Training
 
 Loads GeoTIFF shards from manifest.jsonl with 6-month context + 6-month rollout windows.
+Includes optional data augmentation for improved generalization.
 """
 
 import json
@@ -46,6 +47,11 @@ class SIADDataset(Dataset):
         rollout_horizon: Number of rollout months (H, default 6)
         data_root: Root directory for resolving relative GeoTIFF paths
         normalize: Whether to normalize observations to [0, 1] (default True)
+        augment: Whether to apply data augmentation (default False)
+                 Augmentation includes:
+                 - Random horizontal/vertical flips (geographic invariance)
+                 - Random rotations (±10 degrees)
+                 - Brightness jitter (±10% for cloud/shadow variation)
     """
 
     def __init__(
@@ -54,7 +60,8 @@ class SIADDataset(Dataset):
         context_length: int = 1,  # Changed to 1 for single-month context per MODEL.md
         rollout_horizon: int = 6,
         data_root: Optional[str] = None,
-        normalize: bool = True
+        normalize: bool = True,
+        augment: bool = False
     ):
         if not RASTERIO_AVAILABLE:
             raise ImportError("rasterio is required for GeoTIFF loading. Install with: uv add rasterio")
@@ -64,6 +71,7 @@ class SIADDataset(Dataset):
         self.rollout_horizon = rollout_horizon
         self.data_root = Path(data_root) if data_root else self.manifest_path.parent
         self.normalize = normalize
+        self.augment = augment
 
         # Load manifest
         self.samples = self._load_manifest()
@@ -71,6 +79,8 @@ class SIADDataset(Dataset):
         print(f"Loaded {len(self.samples)} samples from {manifest_path}")
         print(f"  Context length: {context_length} months")
         print(f"  Rollout horizon: {rollout_horizon} months")
+        if augment:
+            print(f"  Augmentation: ENABLED (flips, rotations ±10°, brightness ±10%)")
 
     def _load_manifest(self) -> List[Dict]:
         """Load and parse manifest.jsonl"""
@@ -89,15 +99,26 @@ class SIADDataset(Dataset):
 
                     # Verify length requirements
                     min_length = self.context_length + self.rollout_horizon
-                    if len(sample["observations"]) < min_length:
+                    available_months = len(sample["observations"])
+
+                    if available_months < min_length:
                         raise ValueError(
-                            f"Sample has {len(sample['observations'])} observations, "
-                            f"need at least {min_length}"
+                            f"Sample has {available_months} observations, "
+                            f"need at least {min_length} (context_length={self.context_length} + "
+                            f"rollout_horizon={self.rollout_horizon})"
                         )
                     if len(sample["actions"]) < min_length:
                         raise ValueError(
                             f"Sample has {len(sample['actions'])} actions, "
                             f"need at least {min_length}"
+                        )
+
+                    # Validate context_length against available data
+                    if self.context_length > available_months - self.rollout_horizon:
+                        raise ValueError(
+                            f"context_length={self.context_length} is too large. "
+                            f"With {available_months} months and rollout_horizon={self.rollout_horizon}, "
+                            f"max context_length is {available_months - self.rollout_horizon}"
                         )
 
                     samples.append(sample)
@@ -171,6 +192,88 @@ class SIADDataset(Dataset):
 
             return arr
 
+    def _apply_augmentation(self, arr: np.ndarray) -> np.ndarray:
+        """Apply random augmentation to a single image
+
+        Augmentations preserve satellite imagery properties:
+        - Random horizontal/vertical flips (geographic invariance)
+        - Small rotations (±10 degrees)
+        - Brightness jitter (±10% for cloud/shadow variation)
+
+        Args:
+            arr: [C, H, W] array
+
+        Returns:
+            Augmented [C, H, W] array
+        """
+        # Random horizontal flip (50% chance)
+        if np.random.rand() < 0.5:
+            arr = np.flip(arr, axis=2).copy()
+
+        # Random vertical flip (50% chance)
+        if np.random.rand() < 0.5:
+            arr = np.flip(arr, axis=1).copy()
+
+        # Random rotation (±10 degrees)
+        angle = np.random.uniform(-10, 10)
+        if abs(angle) > 0.1:  # Skip if negligible
+            from scipy.ndimage import rotate
+            # Rotate each channel independently
+            # Use order=1 (bilinear) for data, order=0 (nearest) for valid mask
+            for c in range(arr.shape[0]):
+                order = 0 if c == 7 else 1  # Last channel is valid mask
+                arr[c] = rotate(arr[c], angle, reshape=False, order=order, mode='nearest')
+
+        # Brightness jitter (±10%) - only for optical bands (first 4 channels)
+        # Don't jitter SAR (channels 4-5) or nightlights (channel 6) or valid mask (channel 7)
+        brightness_factor = np.random.uniform(0.9, 1.1)
+        arr[:4] = np.clip(arr[:4] * brightness_factor, 0.0, 1.0)
+
+        return arr
+
+    def _apply_augmentation_to_sequence(self, obs_sequence: np.ndarray) -> np.ndarray:
+        """Apply consistent augmentation to a temporal sequence
+
+        Ensures the same geometric augmentation is applied across all timesteps
+        to preserve temporal alignment.
+
+        Args:
+            obs_sequence: [T, C, H, W] array (T timesteps)
+
+        Returns:
+            Augmented [T, C, H, W] array
+        """
+        # Sample augmentation parameters once for the entire sequence
+        flip_h = np.random.rand() < 0.5
+        flip_v = np.random.rand() < 0.5
+        angle = np.random.uniform(-10, 10)
+        brightness_factor = np.random.uniform(0.9, 1.1)
+
+        augmented = obs_sequence.copy()
+
+        # Apply same geometric transforms to all timesteps
+        for t in range(obs_sequence.shape[0]):
+            # Flips
+            if flip_h:
+                augmented[t] = np.flip(augmented[t], axis=2).copy()
+            if flip_v:
+                augmented[t] = np.flip(augmented[t], axis=1).copy()
+
+            # Rotation
+            if abs(angle) > 0.1:
+                from scipy.ndimage import rotate
+                for c in range(augmented.shape[1]):
+                    order = 0 if c == 7 else 1  # Last channel is valid mask
+                    augmented[t, c] = rotate(
+                        augmented[t, c], angle, reshape=False, order=order, mode='nearest'
+                    )
+
+            # Brightness jitter (different per timestep to simulate varying conditions)
+            brightness_t = np.random.uniform(0.9, 1.1)
+            augmented[t, :4] = np.clip(augmented[t, :4] * brightness_t, 0.0, 1.0)
+
+        return augmented
+
     def __len__(self) -> int:
         return len(self.samples)
 
@@ -204,6 +307,15 @@ class SIADDataset(Dataset):
         # Load GeoTIFFs
         obs_context = np.stack([self._load_geotiff(p) for p in obs_context_paths])  # [L, C, H, W]
         obs_targets = np.stack([self._load_geotiff(p) for p in obs_targets_paths])  # [H, C, H, W]
+
+        # Apply augmentation if enabled
+        if self.augment:
+            # Concatenate context and targets for consistent augmentation
+            full_sequence = np.concatenate([obs_context, obs_targets], axis=0)  # [L+H, C, H, W]
+            full_sequence = self._apply_augmentation_to_sequence(full_sequence)
+            # Split back
+            obs_context = full_sequence[:L]
+            obs_targets = full_sequence[L:]
 
         # Convert to tensors (use .copy() to ensure tensors are contiguous and can be batched)
         obs_context = torch.from_numpy(obs_context.copy())

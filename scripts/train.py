@@ -26,11 +26,15 @@ def main():
     parser.add_argument("--model-size", type=str, default="tiny",
                        choices=["tiny", "small", "medium", "large", "xlarge"],
                        help="Model size from configs/model_sizes.yaml")
+    parser.add_argument("--context-length", type=int, default=1, choices=[1, 3, 6],
+                       help="Context length in months (1, 3, or 6). Memory usage: "
+                            "1 month=32 batch, 3 months=24 batch, 6 months=16 batch")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument("--epochs", type=int, default=50, help="Number of epochs")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate")
     parser.add_argument("--checkpoint-dir", type=str, default="checkpoints", help="Checkpoint directory")
     parser.add_argument("--num-workers", type=int, default=16, help="DataLoader workers")
+    parser.add_argument("--augment", action="store_true", help="Enable data augmentation (flips, rotations, brightness)")
     parser.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
     parser.add_argument("--wandb-project", type=str, default="siad-world-model", help="Wandb project name")
     parser.add_argument("--wandb-name", type=str, default=None, help="Wandb run name")
@@ -50,20 +54,46 @@ def main():
 
     # Load dataset
     print(f"\nLoading dataset from: {args.manifest}")
-    dataset = SIADDataset(
+    print(f"Context length: {args.context_length} month(s)")
+
+    # Recommend batch size based on context length (memory usage guidance)
+    recommended_batch_sizes = {1: 32, 3: 24, 6: 16}
+    if args.batch_size == 32 and args.context_length in recommended_batch_sizes:
+        recommended = recommended_batch_sizes[args.context_length]
+        if args.batch_size != recommended:
+            print(f"NOTE: For context_length={args.context_length}, recommended batch_size={recommended}")
+            print(f"      (you are using batch_size={args.batch_size})")
+
+    # Create training dataset with augmentation (if enabled)
+    train_dataset = SIADDataset(
         manifest_path=args.manifest,
-        context_length=1,  # Single-month context per MODEL.md
+        context_length=args.context_length,
         rollout_horizon=6,
         data_root=args.data_root,
-        normalize=True
+        normalize=True,
+        augment=args.augment
     )
 
-    # Split train/val (80/20)
-    train_size = int(0.8 * len(dataset))
-    val_size = len(dataset) - train_size
-    train_dataset, val_dataset = torch.utils.data.random_split(
-        dataset, [train_size, val_size]
+    # Create validation dataset WITHOUT augmentation
+    val_dataset = SIADDataset(
+        manifest_path=args.manifest,
+        context_length=args.context_length,
+        rollout_horizon=6,
+        data_root=args.data_root,
+        normalize=True,
+        augment=False  # Never augment validation data
     )
+
+    # Split train/val (80/20) using indices
+    train_size = int(0.8 * len(train_dataset))
+    val_size = len(train_dataset) - train_size
+
+    indices = torch.randperm(len(train_dataset)).tolist()
+    train_indices = indices[:train_size]
+    val_indices = indices[train_size:]
+
+    train_dataset = torch.utils.data.Subset(train_dataset, train_indices)
+    val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
 
     print(f"  Train samples: {len(train_dataset)}")
     print(f"  Val samples: {len(val_dataset)}")
