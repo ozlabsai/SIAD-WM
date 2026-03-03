@@ -49,6 +49,7 @@ class SIADConfig(PretrainedConfig):
         transition_heads: int = 8,
         transition_mlp_dim: int = 2048,
         dropout: float = 0.1,
+        use_decoder: bool = False,
         ema_decay: float = 0.996,
         ema_warmup_steps: int = 1000,
         **kwargs
@@ -64,6 +65,7 @@ class SIADConfig(PretrainedConfig):
         self.transition_heads = transition_heads
         self.transition_mlp_dim = transition_mlp_dim
         self.dropout = dropout
+        self.use_decoder = use_decoder
         self.ema_decay = ema_decay
         self.ema_warmup_steps = ema_warmup_steps
 
@@ -98,7 +100,8 @@ class SIADWorldModel(PreTrainedModel):
             transition_blocks=config.transition_blocks,
             transition_heads=config.transition_heads,
             transition_mlp_dim=config.transition_mlp_dim,
-            dropout=config.dropout
+            dropout=config.dropout,
+            use_decoder=config.use_decoder
         )
         
         # For HF compatibility
