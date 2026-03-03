@@ -16,6 +16,7 @@ from typing import Dict, Optional
 from .encoder import ContextEncoder, TargetEncoderEMA
 from .actions import ActionEncoder
 from .transition import TransitionModel
+from .decoder import SpatialDecoder
 
 
 class WorldModel(nn.Module):
@@ -36,34 +37,39 @@ class WorldModel(nn.Module):
         in_channels: int = 8,
         latent_dim: int = 512,
         action_dim: int = 1,
-        
+
         # Encoder config
         encoder_blocks: int = 4,
         encoder_heads: int = 8,
         encoder_mlp_dim: int = 2048,
-        
+
         # Transition config
         transition_blocks: int = 6,
         transition_heads: int = 8,
         transition_mlp_dim: int = 2048,
-        
+
         # EMA config
         tau_start: float = 0.99,
         tau_end: float = 0.995,
         warmup_steps: int = 2000,
-        
+
         # Conditioning config
         use_film: bool = True,
         use_action_token: bool = True,
-        
+
+        # Decoder config (optional, for visualization/demo)
+        use_decoder: bool = False,
+        decoder_hidden_dims: tuple = (256, 128, 64, 32),
+
         # Regularization
         dropout: float = 0.0
     ):
         super().__init__()
-        
+
         self.in_channels = in_channels
         self.latent_dim = latent_dim
         self.action_dim = action_dim
+        self.use_decoder = use_decoder
         
         # Context encoder
         self.context_encoder = ContextEncoder(
@@ -106,6 +112,18 @@ class WorldModel(nn.Module):
             use_film=use_film,
             use_action_token=use_action_token
         )
+
+        # Decoder (optional, for pixel-space visualization)
+        if use_decoder:
+            self.decoder = SpatialDecoder(
+                latent_dim=latent_dim,
+                out_channels=in_channels,
+                hidden_dims=decoder_hidden_dims,
+                use_batch_norm=True,
+                dropout=dropout
+            )
+        else:
+            self.decoder = None
     
     def encode(self, x: torch.Tensor) -> torch.Tensor:
         """Encode observation to latent tokens
@@ -186,14 +204,36 @@ class WorldModel(nn.Module):
     
     def encode_targets(self, x: torch.Tensor) -> torch.Tensor:
         """Encode targets with stable target encoder (no gradient)
-        
+
         Args:
             x: [B, C, 256, 256] target observations
-        
+
         Returns:
             z_target: [B, 256, 512] stable target tokens
         """
         return self.target_encoder(x)
+
+    def decode(self, z: torch.Tensor) -> torch.Tensor:
+        """Decode latent tokens to pixel-space imagery
+
+        Requires decoder to be enabled (use_decoder=True).
+
+        Args:
+            z: Latent tokens [B, 256, D] or [B, H, 256, D]
+
+        Returns:
+            x_recon: Reconstructed imagery [B, 8, 256, 256] or [B, H, 8, 256, 256]
+
+        Raises:
+            RuntimeError: If decoder is not enabled
+        """
+        if self.decoder is None:
+            raise RuntimeError(
+                "Decoder not available. Create model with use_decoder=True "
+                "to enable pixel-space decoding for visualization."
+            )
+
+        return self.decoder(z)
     
     def update_target_encoder(self, step: Optional[int] = None):
         """Update target encoder via EMA

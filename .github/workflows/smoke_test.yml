@@ -29,12 +29,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .venv
-          key: ${{ runner.os }}-uv-${{ hashFiles('uv.lock') }}
+          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-uv-
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync
 
       - name: Lint with ruff
         run: uv run ruff check src/ tests/

@@ -1,0 +1,24 @@
+{
+  "timestamp": "2026-03-02T22:45:25.669362",
+  "total_experiments": 3,
+  "successful": 0,
+  "failed": 0,
+  "skipped": 0,
+  "experiments": [
+    {
+      "name": "medium_ctx1_e50_bs24_20260302_224525",
+      "status": "dry_run",
+      "command": "uv run scripts/train.py --manifest data/manifest.jsonl --model-size medium --context-length 1 --batch-size 24 --epochs 50 --lr 0.0001 --checkpoint-dir checkpoints/medium_ctx1_e50_bs24_20260302_224525 --num-workers 16 --wandb --wandb-project siad-temporal --wandb-name medium_ctx1_e50_bs24_20260302_224525"
+    },
+    {
+      "name": "medium_ctx3_e50_bs20_20260302_224525",
+      "status": "dry_run",
+      "command": "uv run scripts/train.py --manifest data/manifest.jsonl --model-size medium --context-length 3 --batch-size 20 --epochs 50 --lr 0.0001 --checkpoint-dir checkpoints/medium_ctx3_e50_bs20_20260302_224525 --num-workers 16 --wandb --wandb-project siad-temporal --wandb-name medium_ctx3_e50_bs20_20260302_224525"
+    },
+    {
+      "name": "medium_ctx6_e50_bs16_20260302_224525",
+      "status": "dry_run",
+      "command": "uv run scripts/train.py --manifest data/manifest.jsonl --model-size medium --context-length 6 --batch-size 16 --epochs 50 --lr 0.0001 --checkpoint-dir checkpoints/medium_ctx6_e50_bs16_20260302_224525 --num-workers 16 --wandb --wandb-project siad-temporal --wandb-name medium_ctx6_e50_bs16_20260302_224525"
+    }
+  ]
+}
