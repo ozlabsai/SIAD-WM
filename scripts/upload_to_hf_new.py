@@ -81,12 +81,26 @@ def upload_to_hub(
 
     # 2. Load model from checkpoint
     print("\n2. Loading model from checkpoint...")
-    model = SIADWorldModel.from_checkpoint(checkpoint_path, config=config)
+
+    # First load encoder checkpoint WITHOUT decoder
+    encoder_checkpoint = torch.load(checkpoint_path, map_location="cpu")
+
+    # Create model with decoder enabled if decoder_path provided
+    model = SIADWorldModel(config)
+
+    # Load encoder weights (strict=False to ignore missing decoder keys)
+    model.model.load_state_dict(encoder_checkpoint['model_state_dict'], strict=False)
+    print(f"   ✓ Encoder loaded")
 
     # 2b. Load decoder if provided
     if decoder_path:
         print("\n2b. Loading decoder...")
         decoder_checkpoint = torch.load(decoder_path, map_location="cpu")
+
+        # Now the decoder should exist in the model
+        if model.model.decoder is None:
+            raise RuntimeError("Decoder is None despite use_decoder=True. Check model initialization.")
+
         model.model.decoder.load_state_dict(decoder_checkpoint['decoder_state_dict'])
         decoder_loss = decoder_checkpoint.get('val_loss', 'N/A')
         print(f"   ✓ Decoder loaded (val loss: {decoder_loss})")
