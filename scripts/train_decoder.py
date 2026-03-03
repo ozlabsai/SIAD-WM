@@ -223,11 +223,12 @@ def main():
     )
 
     # Load datasets
+    # Note: SIADDataset requires rollout_horizon >= 1, but we only use context for decoder training
     print(f"\nLoading datasets...")
     train_dataset = SIADDataset(
         manifest_path=args.manifest,
         context_length=1,
-        rollout_horizon=0,  # Only need context, no rollout
+        rollout_horizon=1,  # Minimum, but we won't use the rollout
         normalize=True,
         data_root=args.data_root
     )
@@ -235,7 +236,7 @@ def main():
     val_dataset = SIADDataset(
         manifest_path=args.val_manifest,
         context_length=1,
-        rollout_horizon=0,
+        rollout_horizon=1,  # Minimum, but we won't use the rollout
         normalize=True,
         data_root=args.data_root
     )
