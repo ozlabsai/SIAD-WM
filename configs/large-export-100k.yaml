@@ -1,0 +1,62 @@
+# SIAD Large Export Configuration - 100K+ Samples
+# Maximum scale for production-grade world model training
+
+aoi:
+  aoi_id: "large-export-100k"
+  bounds:
+    # Northern California - MASSIVE coverage
+    # ~2° × 2° ≈ 220km × 220km ≈ 7,744 tiles (88×88 grid)
+    # Covers SF Bay Area, Sacramento Valley, Sierra foothills, Central Valley
+    # Includes urban, agricultural, forest, mountain ecosystems
+    min_lon: -123.0
+    max_lon: -121.0
+    min_lat: 37.0
+    max_lat: 39.0
+  projection: "EPSG:3857"
+  resolution_m: 10
+  tile_size_px: 256  # 2.56km per tile
+
+data:
+  gcp_project: "siad-earth-engine"
+  gcs_bucket: "siad-exports"
+  export_path: "gs://siad-exports/siad/{aoi_id}"
+  start_month: "2019-01"  # EXTENDED: 6 years instead of 4
+  end_month: "2024-12"    # 72 months total
+  sources:
+    - "s1"      # Sentinel-1 SAR (all-weather, crucial for clouds)
+    - "s2"      # Sentinel-2 optical (10m resolution)
+    - "viirs"   # VIIRS nighttime lights (human activity proxy)
+    - "chirps"  # CHIRPS precipitation (action/context)
+
+# Expected output:
+# - 88 × 88 = 7,744 tiles
+# - 72 months per tile (2019-2024)
+# - 7,744 × 72 = 557,568 samples (~558k!)
+#
+# This is MASSIVE - consider starting with 10k config first
+# Storage estimate: ~2TB (assuming 4MB per tile-month GeoTIFF)
+# Export time: Several days of Earth Engine compute
+
+model:
+  latent_dim: 256
+  context_length: 6
+  rollout_horizon: 6
+  batch_size: 32  # Larger batch for bigger dataset
+  epochs: 100     # More epochs for more data
+  learning_rate: 1.0e-4
+  seed: 42
+
+detection:
+  percentile_threshold: 99.0
+  persistence_months: 2
+  min_cluster_size: 3
+  scenarios:
+    - "neutral"
+    - "observed"
+
+# WARNING: This is a LARGE export.
+# Recommendations:
+# 1. Start with large-export-10k.yaml first to validate pipeline
+# 2. Ensure GCS bucket has sufficient quota (>2TB)
+# 3. Monitor Earth Engine task queue - this will submit thousands of tasks
+# 4. Consider breaking into smaller regional exports and combining

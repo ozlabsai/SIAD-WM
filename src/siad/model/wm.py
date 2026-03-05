@@ -237,14 +237,90 @@ class WorldModel(nn.Module):
     
     def update_target_encoder(self, step: Optional[int] = None):
         """Update target encoder via EMA
-        
+
         Should be called after optimizer.step() in training loop.
-        
+
         Args:
             step: Current training step for EMA schedule
         """
         self.target_encoder.update_from_encoder(self.context_encoder, step=step)
-    
+
+    def load_state_dict(
+        self,
+        state_dict: dict,
+        strict: bool = False,
+        verbose: bool = True
+    ) -> None:
+        """Load model state with automatic action dimension upgrade.
+
+        Supports backward compatibility: v1 checkpoints (action_dim=2) can be loaded
+        into v2 models (action_dim=4) with zero-initialized temporal feature weights.
+
+        Per contracts/model_api.md: Checkpoint dimension upgrade contract.
+
+        Args:
+            state_dict: Checkpoint state dictionary
+            strict: If True, require exact key match (default False for compatibility)
+            verbose: If True, log dimension upgrade (default True)
+
+        Raises:
+            ValueError: If checkpoint action_dim > model action_dim (downgrade not supported)
+        """
+        # Detect checkpoint action_dim from action encoder weight shape
+        action_encoder_key = 'action_encoder.mlp.0.weight'
+
+        if action_encoder_key in state_dict:
+            checkpoint_weight = state_dict[action_encoder_key]
+            checkpoint_action_dim = checkpoint_weight.shape[1]  # [hidden_dim, action_dim]
+            current_action_dim = self.action_encoder.action_dim
+
+            if checkpoint_action_dim == current_action_dim:
+                # Dimension match - standard loading
+                super().load_state_dict(state_dict, strict=strict)
+                if verbose:
+                    print(f"[WorldModel] Loaded checkpoint: action_dim={current_action_dim} (no upgrade needed)")
+                return
+
+            elif checkpoint_action_dim < current_action_dim:
+                # Dimension upgrade (v1→v2): Pad weights for new temporal features
+                if verbose:
+                    print(
+                        f"[WorldModel] Upgrading checkpoint: {checkpoint_action_dim}→{current_action_dim} dims "
+                        f"(temporal features zero-initialized)"
+                    )
+
+                # Pad Linear(checkpoint_dim→hidden_dim) to Linear(current_dim→hidden_dim)
+                old_weight = checkpoint_weight  # [hidden_dim, checkpoint_dim]
+                hidden_dim = old_weight.shape[0]
+
+                # Create new weight tensor with additional dimensions
+                new_weight = torch.zeros(hidden_dim, current_action_dim, dtype=old_weight.dtype, device=old_weight.device)
+
+                # Copy existing weights (preserve weather features)
+                new_weight[:, :checkpoint_action_dim] = old_weight
+                # new_weight[:, checkpoint_action_dim:] remains zero (temporal features zero-initialized)
+
+                # Update state dict
+                state_dict[action_encoder_key] = new_weight
+
+                # Bias doesn't need padding (it's per hidden unit, not per input dim)
+                # Load with updated state dict
+                super().load_state_dict(state_dict, strict=strict)
+                return
+
+            else:
+                # Dimension downgrade (v2→v1): Not supported
+                raise ValueError(
+                    f"Cannot load checkpoint with action_dim={checkpoint_action_dim} "
+                    f"into model with action_dim={current_action_dim}. "
+                    f"Upgrade model to support temporal features (action_dim≥{checkpoint_action_dim})."
+                )
+        else:
+            # No action encoder in checkpoint (unusual but handle gracefully)
+            if verbose:
+                print("[WorldModel] Warning: No action_encoder found in checkpoint, loading without dimension check")
+            super().load_state_dict(state_dict, strict=strict)
+
     def get_config(self) -> Dict:
         """Return model configuration for checkpointing"""
         return {

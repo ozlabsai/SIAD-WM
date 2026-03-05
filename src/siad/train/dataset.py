@@ -2,6 +2,11 @@
 
 Loads GeoTIFF shards from manifest.jsonl with 6-month context + 6-month rollout windows.
 Includes optional data augmentation for improved generalization.
+
+V2 Schema (Temporal Conditioning):
+- Supports preprocessing_version field in manifest for backward compatibility
+- Extends action vectors from [rain_anom, temp_anom] to include temporal features
+- Computes month_sin/cos from timestamp data
 """
 
 import json
@@ -10,6 +15,7 @@ from torch.utils.data import Dataset
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 import numpy as np
+from datetime import datetime
 
 try:
     import rasterio
@@ -18,6 +24,9 @@ except ImportError:
     RASTERIO_AVAILABLE = False
     print("Warning: rasterio not installed. GeoTIFF loading will fail.")
 
+# Import temporal feature computation
+from siad.data.preprocessing import compute_temporal_features
+
 
 class SIADDataset(Dataset):
     """PyTorch Dataset for SIAD world model training
@@ -25,21 +34,36 @@ class SIADDataset(Dataset):
     Loads GeoTIFF observations and action vectors from manifest.jsonl.
 
     Manifest format (one JSON object per line):
+
+    V1 Schema (baseline):
     {
         "tile_id": "tile_x000_y000",
         "months": ["2023-01", "2023-02", ..., "2023-12"],
         "observations": ["path/to/tile_2023-01.tif", ...],  # 12 GeoTIFFs
-        "actions": [[rain_anom, temp_anom], ...]             # 12 action vectors
+        "actions": [[rain_anom, temp_anom], ...]             # 12 action vectors [A=2]
     }
+
+    V2 Schema (temporal conditioning):
+    {
+        "tile_id": "tile_x000_y000",
+        "months": ["2023-01", "2023-02", ..., "2023-12"],
+        "observations": ["path/to/tile_2023-01.tif", ...],
+        "actions": [[rain_anom, temp_anom], ...],            # Weather anomalies only
+        "preprocessing_version": "v2"                        # Optional, defaults to v1
+    }
+
+    Note: V2 schema stores only weather anomalies in manifest. Temporal features
+    (month_sin, month_cos) are computed dynamically from "months" field.
 
     Returns:
         Sample dict with keys:
             - obs_context: [L=6, C=8, H=256, W=256] context observations
-            - actions_rollout: [H=6, 2] rollout action vectors
+            - actions_rollout: [H=6, A] rollout action vectors (A=2 for v1, A=4 for v2)
             - obs_targets: [H=6, C=8, H=256, W=256] target observations
             - tile_id: str
             - months_context: List[str]
             - months_rollout: List[str]
+            - timestamps: Optional[List[datetime]] - Only for v2 (None for v1)
 
     Args:
         manifest_path: Path to manifest.jsonl
@@ -52,6 +76,8 @@ class SIADDataset(Dataset):
                  - Random horizontal/vertical flips (geographic invariance)
                  - Random rotations (±10 degrees)
                  - Brightness jitter (±10% for cloud/shadow variation)
+        preprocessing_version: Override preprocessing version ("v1" or "v2")
+                               If None, read from manifest (default None)
     """
 
     def __init__(
@@ -61,7 +87,8 @@ class SIADDataset(Dataset):
         rollout_horizon: int = 6,
         data_root: Optional[str] = None,
         normalize: bool = True,
-        augment: bool = False
+        augment: bool = False,
+        preprocessing_version: Optional[str] = None
     ):
         if not RASTERIO_AVAILABLE:
             raise ImportError("rasterio is required for GeoTIFF loading. Install with: uv add rasterio")
@@ -72,13 +99,19 @@ class SIADDataset(Dataset):
         self.data_root = Path(data_root) if data_root else self.manifest_path.parent
         self.normalize = normalize
         self.augment = augment
+        self.preprocessing_version_override = preprocessing_version
 
         # Load manifest
         self.samples = self._load_manifest()
 
+        # Detect preprocessing version from first sample (can be overridden per sample)
+        first_version = self.samples[0].get('preprocessing_version', 'v1')
+        detected_version = preprocessing_version or first_version
+
         print(f"Loaded {len(self.samples)} samples from {manifest_path}")
         print(f"  Context length: {context_length} months")
         print(f"  Rollout horizon: {rollout_horizon} months")
+        print(f"  Preprocessing version: {detected_version} (action_dim={4 if detected_version == 'v2' else 2})")
         if augment:
             print(f"  Augmentation: ENABLED (flips, rotations ±10°, brightness ±10%)")
 
@@ -277,19 +310,86 @@ class SIADDataset(Dataset):
     def __len__(self) -> int:
         return len(self.samples)
 
+    @staticmethod
+    def collate_fn(batch: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+        """Collate batch of samples with version consistency checking.
+
+        Ensures all samples in batch have consistent action_dim (cannot mix v1 and v2).
+        Batches observations, actions, and optionally timestamps.
+
+        Args:
+            batch: List of dictionaries from __getitem__()
+
+        Returns:
+            Dictionary with batched tensors:
+                - obs_context: [B, C, H, W] or [B, L, C, H, W] (depends on context_length)
+                - obs_targets: [B, H, C, H, W]
+                - actions_rollout: [B, H, A] where A ∈ {2, 4}
+                - tile_id: List[str]
+                - months_context: List[List[str]]
+                - months_rollout: List[List[str]]
+                - timestamps: List[List[datetime]] or None (None if all samples are v1)
+
+        Raises:
+            ValueError: If batch contains mixed v1/v2 samples (inconsistent action_dim)
+        """
+        if len(batch) == 0:
+            raise ValueError("Cannot collate empty batch")
+
+        # Check action_dim consistency across batch
+        A = batch[0]["actions_rollout"].shape[1]
+        for i, sample in enumerate(batch):
+            sample_action_dim = sample["actions_rollout"].shape[1]
+            if sample_action_dim != A:
+                raise ValueError(
+                    f"Mixed preprocessing versions in batch: "
+                    f"sample 0 has action_dim={A}, sample {i} has action_dim={sample_action_dim}. "
+                    f"Cannot mix v1 (action_dim=2) and v2 (action_dim=4) in same batch."
+                )
+
+        # Stack observations
+        obs_context = torch.stack([s["obs_context"] for s in batch])  # [B, ...]
+        obs_targets = torch.stack([s["obs_targets"] for s in batch])  # [B, H, C, H, W]
+
+        # Stack actions
+        actions_rollout = torch.stack([s["actions_rollout"] for s in batch])  # [B, H, A]
+
+        # Collect metadata (not tensors)
+        tile_ids = [s["tile_id"] for s in batch]
+        months_context = [s["months_context"] for s in batch]
+        months_rollout = [s["months_rollout"] for s in batch]
+
+        # Stack timestamps if available (v2 only)
+        timestamps_batch = [s["timestamps"] for s in batch if s["timestamps"] is not None]
+        timestamps = timestamps_batch if len(timestamps_batch) == len(batch) else None
+
+        return {
+            "obs_context": obs_context,
+            "obs_targets": obs_targets,
+            "actions_rollout": actions_rollout,
+            "tile_id": tile_ids,
+            "months_context": months_context,
+            "months_rollout": months_rollout,
+            "timestamps": timestamps
+        }
+
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
-        """Get training sample
+        """Get training sample with version-aware action loading
 
         Returns:
             Dict with keys:
                 - obs_context: [L, C, H, W] context observations
-                - actions_rollout: [H, 2] rollout actions
+                - actions_rollout: [H, A] rollout actions (A=2 for v1, A=4 for v2)
                 - obs_targets: [H, C, H, W] target observations
                 - tile_id: str
                 - months_context: List[str]
                 - months_rollout: List[str]
+                - timestamps: Optional[List[datetime]] - Only for v2 (None for v1)
         """
         sample = self.samples[idx]
+
+        # Detect preprocessing version (per-sample or global override)
+        version = self.preprocessing_version_override or sample.get('preprocessing_version', 'v1')
 
         # Extract windows
         L = self.context_length
@@ -300,7 +400,7 @@ class SIADDataset(Dataset):
         months_context = sample["months"][:L]
 
         # Rollout: indices [L:L+H]
-        actions_rollout = sample["actions"][L:L+H]
+        actions_rollout_v1 = np.array(sample["actions"][L:L+H], dtype=np.float32)  # [H, 2]
         obs_targets_paths = sample["observations"][L:L+H]
         months_rollout = sample["months"][L:L+H]
 
@@ -317,10 +417,57 @@ class SIADDataset(Dataset):
             obs_context = full_sequence[:L]
             obs_targets = full_sequence[L:]
 
+        # Version-aware action processing
+        timestamps = None
+        if version == 'v1':
+            # V1: Use weather anomalies only [H, 2]
+            actions_rollout = actions_rollout_v1
+        elif version == 'v2':
+            # V2: Extend with temporal features [H, 4]
+            # Parse month strings to datetime for temporal feature extraction
+            timestamps = []
+            temporal_features = []
+
+            for month_str in months_rollout:
+                # Parse "YYYY-MM" to datetime (use day=15 as representative)
+                try:
+                    year, month = map(int, month_str.split('-'))
+                    timestamp = datetime(year, month, 15)
+                    timestamps.append(timestamp)
+
+                    # Compute temporal features
+                    month_sin, month_cos = compute_temporal_features(timestamp)
+                    temporal_features.append([month_sin, month_cos])
+                except ValueError:
+                    raise ValueError(
+                        f"Invalid month format '{month_str}' in sample {idx}. "
+                        f"Expected 'YYYY-MM' format."
+                    )
+
+            temporal_features = np.array(temporal_features, dtype=np.float32)  # [H, 2]
+
+            # Validate unit circle property (per contract)
+            month_sin = temporal_features[:, 0]
+            month_cos = temporal_features[:, 1]
+            unit_circle_check = month_sin**2 + month_cos**2
+            if not np.all((unit_circle_check >= 0.99) & (unit_circle_check <= 1.01)):
+                raise AssertionError(
+                    f"Temporal features violate unit circle property in sample {idx}: "
+                    f"sin²+cos² = {unit_circle_check}"
+                )
+
+            # Concatenate: [H, 2] + [H, 2] → [H, 4]
+            actions_rollout = np.concatenate([actions_rollout_v1, temporal_features], axis=-1)
+        else:
+            raise ValueError(
+                f"Unknown preprocessing_version '{version}' in sample {idx}. "
+                f"Expected 'v1' or 'v2'."
+            )
+
         # Convert to tensors (use .copy() to ensure tensors are contiguous and can be batched)
         obs_context = torch.from_numpy(obs_context.copy())
         obs_targets = torch.from_numpy(obs_targets.copy())
-        actions_rollout = torch.tensor(actions_rollout, dtype=torch.float32)  # [H, 2]
+        actions_rollout = torch.from_numpy(actions_rollout.copy())  # [H, A] where A ∈ {2, 4}
 
         # If context_length=1, squeeze to [C, H, W] for single-image input
         if self.context_length == 1:
@@ -332,7 +479,8 @@ class SIADDataset(Dataset):
             "obs_targets": obs_targets,
             "tile_id": sample["tile_id"],
             "months_context": months_context,
-            "months_rollout": months_rollout
+            "months_rollout": months_rollout,
+            "timestamps": timestamps  # None for v1, List[datetime] for v2
         }
 
 

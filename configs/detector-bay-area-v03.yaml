@@ -1,0 +1,167 @@
+# SIAD Detector Configuration v0.3
+# Post-training anomaly detection and scenario evaluation
+# Operates on trained JEPA World Model checkpoints
+
+version:
+  config_version: "0.3"
+  model_spec_version: "0.2"
+
+# Model checkpoint to use for detection
+model:
+  checkpoint_path: "checkpoints/bay-area-v03-baseline-spec-aligned/best.ckpt"
+  # Checkpoint must match train config version for compatibility
+
+# Detection scenarios
+# These are ONLY for inference/detection, NOT used during training
+scenarios:
+  # Neutral scenario: exogenous actions = 0, month encoding from observed
+  # Primary scenario for residual-based anomaly detection
+  neutral:
+    enabled: true
+    action_override:
+      rain_anom: 0.0  # Average precipitation (no anomaly)
+      temp_anom: 0.0  # Average temperature (no anomaly)
+      # month_sin/cos: keep from observed data (if in action vector)
+    description: "Counterfactual: average weather conditions for the observed month"
+    use_for_anomaly_detection: true
+
+  # Weather best-fit: optimize actions to minimize residual
+  # Diagnostic scenario to find "best explanation" actions
+  weather_bestfit:
+    enabled: true
+    action_optimization: "gradient_descent"
+    max_iterations: 100
+    learning_rate: 0.01
+    description: "Find actions that minimize prediction error"
+    use_for_anomaly_detection: false  # Diagnostic only
+
+  # Counterfactual scenarios: explicit action perturbations
+  counterfactuals:
+    - name: "extreme_drought"
+      enabled: false
+      rain_anom: -2.0  # -2σ precipitation
+      precip_abs: 0.1  # Low absolute precip
+      month_sin: 0.0   # Keep temporal encoding from actual
+      month_cos: 0.0
+      description: "Simulate extreme drought conditions"
+
+    - name: "extreme_flood"
+      enabled: false
+      rain_anom: +2.0  # +2σ precipitation
+      precip_abs: 0.9  # High absolute precip
+      month_sin: 0.0
+      month_cos: 0.0
+      description: "Simulate extreme flood conditions"
+
+    - name: "seasonal_shift"
+      enabled: false
+      rain_anom: 0.0
+      precip_abs: null  # Use observed value
+      month_sin: null   # Shift by 3 months (implement in code)
+      month_cos: null
+      shift_months: 3
+      description: "Simulate 3-month seasonal shift"
+
+# Anomaly detection thresholds
+detection:
+  # Primary detection: residual magnitude
+  residual_metric: "cosine_distance"  # Match training loss
+  percentile_threshold: 99.0  # Flag top 1% residuals
+  absolute_threshold: null  # Optional absolute threshold
+
+  # Temporal persistence filter
+  persistence:
+    enabled: true
+    min_consecutive_months: 2  # Require anomaly in ≥2 consecutive months
+    description: "Filter transient anomalies (clouds, sensor noise)"
+
+  # Spatial clustering filter
+  clustering:
+    enabled: true
+    min_cluster_size: 3  # Require ≥3 adjacent pixels
+    connectivity: 8  # 8-connected (diagonal adjacency)
+    description: "Filter isolated pixel anomalies"
+
+  # Quality-based weighting
+  quality_weighting:
+    enabled: true
+    weight_by: "s2_valid_frac"  # Weight residuals by cloud-free fraction
+    min_weight: 0.3  # Tiles with <30% valid pixels get low weight
+    max_weight: 1.0
+
+# Residual visualization
+visualization:
+  # Heatmap generation
+  heatmap:
+    enabled: true
+    colormap: "hot"  # matplotlib colormap
+    vmin: 0
+    vmax: null  # Auto-scale to 99th percentile
+    overlay_on_satellite: true  # Overlay on actual RGB imagery
+
+  # Time series plots
+  timeseries:
+    enabled: true
+    plot_per_tile: false  # Too many tiles, only plot flagged anomalies
+    plot_aggregated: true  # AOI-wide statistics
+
+# Output configuration
+output:
+  # Detection results
+  results_path: "results/detector/bay-area-v03/"
+  save_formats:
+    - "geotiff"  # Residual heatmaps as GeoTIFFs
+    - "png"      # Quick preview PNGs
+    - "jsonl"    # Structured detection results
+
+  # Manifest of detected anomalies
+  manifest:
+    path: "results/detector/bay-area-v03/anomalies.jsonl"
+    fields:
+      - tile_id
+      - month
+      - residual_score
+      - percentile_rank
+      - anomaly_flag
+      - cluster_id
+      - cluster_size
+      - s2_valid_frac
+      - scenario_used
+
+# Evaluation metrics (for validation set)
+evaluation:
+  # Compare scenarios
+  scenario_comparison:
+    enabled: true
+    metrics:
+      - "mean_residual"
+      - "median_residual"
+      - "p95_residual"
+      - "p99_residual"
+
+  # Quality stratification
+  stratify_by_quality: true
+  quality_bins:
+    - name: "high_quality"
+      min_s2_valid_frac: 0.7
+    - name: "medium_quality"
+      min_s2_valid_frac: 0.4
+      max_s2_valid_frac: 0.7
+    - name: "low_quality"
+      min_s2_valid_frac: 0.3
+      max_s2_valid_frac: 0.4
+
+  # Temporal analysis
+  temporal_analysis:
+    enabled: true
+    group_by: "month_of_year"  # Seasonal patterns
+    metrics:
+      - "anomaly_rate"
+      - "mean_residual"
+
+# Performance
+performance:
+  batch_size: 32  # Larger than training (no gradients)
+  num_workers: 8
+  device: "cuda"  # GPU inference
+  use_amp: true  # Mixed precision for speed

@@ -1,0 +1,29 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.3, pytest-9.0.1, pluggy-1.6.0 -- /Users/guynachshon/Documents/ozlabs/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /Users/guynachshon/Documents/ozlabs/labs/SIAD
+configfile: pyproject.toml
+plugins: anyio-4.12.0, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 18 items
+
+tests/unit/test_vcreg_core.py::TestVCRegLoss::test_variance_penalty_low_variance PASSED [  5%]
+tests/unit/test_vcreg_core.py::TestVCRegLoss::test_variance_penalty_high_variance PASSED [ 11%]
+tests/unit/test_vcreg_core.py::TestVCRegLoss::test_covariance_penalty_correlated_dims PASSED [ 16%]
+tests/unit/test_vcreg_core.py::TestVCRegLoss::test_covariance_penalty_uncorrelated_dims PASSED [ 22%]
+tests/unit/test_vcreg_core.py::TestVCRegLoss::test_combined_loss PASSED  [ 27%]
+tests/unit/test_vcreg_core.py::TestVCRegLoss::test_metrics_structure PASSED [ 33%]
+tests/unit/test_vcreg_core.py::TestVCRegLoss::test_dead_dims_tracking PASSED [ 38%]
+tests/unit/test_vcreg_core.py::TestVCRegLoss::test_4d_input_handling PASSED [ 44%]
+tests/unit/test_vcreg_core.py::TestVCRegLoss::test_3d_input_handling PASSED [ 50%]
+tests/unit/test_vcreg_core.py::TestVCRegLoss::test_numerical_stability PASSED [ 55%]
+tests/unit/test_vcreg_core.py::TestVCRegLoss::test_default_parameters PASSED [ 61%]
+tests/unit/test_anti_collapse.py::TestAntiCollapseAcceptance::test_variance_floor PASSED [ 66%]
+tests/unit/test_anti_collapse.py::TestAntiCollapseAcceptance::test_constant_embedding_check PASSED [ 72%]
+tests/unit/test_anti_collapse.py::TestAntiCollapseAcceptance::test_regression_lambda_zero PASSED [ 77%]
+tests/unit/test_anti_collapse.py::TestAntiCollapseAcceptance::test_vcreg_prevents_collapse PASSED [ 83%]
+tests/unit/test_anti_collapse.py::TestEMAStability::test_monotonic_schedule PASSED [ 88%]
+tests/unit/test_anti_collapse.py::TestEMAStability::test_update_order PASSED [ 94%]
+tests/unit/test_anti_collapse.py::TestEMAStability::test_stability_fixed_batch PASSED [100%]
+
+============================== 18 passed in 2.28s ==============================

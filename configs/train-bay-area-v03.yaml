@@ -1,0 +1,328 @@
+# SIAD Training Configuration v0.3 - FULLY SPEC COMPLIANT
+# JEPA World Model Training - Bay Area Extended Dataset
+# Zero architectural deviations from MODEL.md canonical spec
+
+version:
+  config_version: "0.3"
+  model_spec_version: "0.2"
+  band_order_version: "v1"
+  preprocessing_version: "v2"
+
+# Dataset configuration
+data:
+  manifest_path: "gs://siad-exports/siad/bay-area-extended-v03/manifest.jsonl"
+  data_root: "gs://siad-exports/siad/bay-area-extended-v03/"
+
+  # Training statistics (from export config)
+  expected_tiles: 784
+  expected_months: 48
+  expected_frames: 37632  # tiles × months (individual observations)
+
+  # Window sampling for training
+  # SPEC: Single initial frame X_t, rollout H steps with observed actions
+  rollout_horizon: 6  # H=6 (predict 6 future frames)
+  expected_windows: 32928  # tiles × (months - H) = 784 × 42
+
+  # Data loading
+  batch_size: 16
+  num_workers: 8
+  prefetch_factor: 2
+
+  # Train/val split with spatial buffer
+  split_strategy: "spatial_buffered"
+  train_fraction: 0.80
+  val_fraction: 0.15
+  buffer_fraction: 0.05  # 1-2 tile buffer between train/val (prevent leakage)
+  # Expected: ~628 train tiles, ~118 val tiles, ~38 buffer tiles (excluded)
+
+  # Quality filtering
+  min_s2_valid_frac: 0.3  # Require ≥30% cloud-free pixels
+  # Note: Consider loss weighting instead of hard drop for tiles with good SAR but poor optical
+
+  # Input shape validation
+  input_channels:
+    min: 8  # Base channels (S2×4, S1×2, VIIRS, mask)
+    max: 9  # With optional S2_cloud_prob_norm
+  # Deterministic channel ordering when optional present:
+  # If C=9: append S2_cloud_prob_norm as index 8
+
+  input_height: 256
+  input_width: 256
+
+  # Action schema (per frame)
+  # NOTE: Train with OBSERVED actions (real weather), not zeros!
+  # Neutral (a=0) is for INFERENCE counterfactuals, not training
+  action_dim: 2  # Spec-compliant: [rain_anom, temp_anom]
+  # Alternative extended: 4 dims if including [rain_anom, temp_anom, month_sin, month_cos]
+  # For baseline, use A=2 per spec; month encoding handled separately if needed
+
+  action_schema:
+    - name: "rain_anom"
+      index: 0
+      description: "Precipitation anomaly (z-score vs 10-yr climatology)"
+      units: "dimensionless"
+      source: "CHIRPS monthly aggregation"
+    - name: "temp_anom"
+      index: 1
+      description: "Temperature anomaly (z-score vs climatology, optional)"
+      units: "dimensionless"
+      source: "ERA5 monthly mean (if available)"
+      optional: true
+      # If unavailable, set to 0 or reduce action_dim to 1
+
+# Model architecture (JEPA World Model - EXACT CANONICAL SPEC)
+model:
+  architecture: "jepa_world_model"
+
+  # Token dimensions (SPEC EXACT)
+  token_dim: 512  # D=512 (embedding dimension per token)
+  num_tokens: 256  # N=256 (16×16 spatial grid)
+  spatial_grid: [16, 16]  # Latent spatial resolution
+
+  # Context Encoder fθ (trainable)
+  context_encoder:
+    # CNN Stem (SPEC EXACT - 3 conv layers)
+    stem:
+      type: "cnn"
+      layers:
+        - type: "conv"
+          kernel_size: 3
+          stride: 1
+          out_channels: 64
+          norm: "groupnorm"
+          activation: "silu"
+        - type: "conv"
+          kernel_size: 3
+          stride: 2  # Downsample 256 -> 128
+          out_channels: 128
+          norm: "groupnorm"
+          activation: "silu"
+        - type: "conv"
+          kernel_size: 3
+          stride: 1
+          out_channels: 128  # SPEC: Output 128 channels
+          norm: "groupnorm"
+          activation: "silu"
+      # Stem output: [B, 128, 128, 128]
+
+    # Patchify + Projection (SPEC EXACT)
+    patchify:
+      patch_size: 8  # Patchify 128×128 with 8×8 patches -> 16×16 grid
+      # Each patch: 8×8×128 = 8192 dims
+      projection_dim: 512  # Project to D=512
+      # Output: [B, 256, 512]
+
+    # Token Encoder Transformer (SPEC EXACT)
+    transformer:
+      num_layers: 4  # SPEC: 4 layers
+      hidden_dim: 512  # D
+      num_heads: 8
+      ffn_dim: 2048  # 4×D
+      dropout: 0.1
+      attention_dropout: 0.1
+      layer_norm_eps: 1.0e-6
+      norm_first: true  # Pre-LN
+
+    # Positional embeddings
+    positional_embedding:
+      spatial_2d: true  # Learned [N, D] added to tokens
+      temporal: false  # NO temporal embeddings (Markov)
+
+  # Target Encoder fθ̄ (EMA, stop-grad)
+  target_encoder:
+    # Same architecture as context_encoder (initialized as copy)
+    ema_schedule:
+      init_tau: 0.99    # Start EMA momentum (SPEC)
+      end_tau: 0.999    # End momentum after warmup (NEVER 1.0!)
+      schedule: "cosine"  # Smooth ramp over training
+      warmup_epochs: 5  # Ramp to end_tau over 5 epochs
+    stop_grad: true  # No backprop through target encoder
+
+  # Action Encoder hφ
+  action_encoder:
+    input_dim: 2  # A=2 (or 1 if temp unavailable)
+    hidden_dim: 64
+    output_dim: 128  # Embedding dim for actions
+    layers:
+      - type: "linear"
+        in_features: 2  # action_dim
+        out_features: 64
+        activation: "silu"
+      - type: "linear"
+        in_features: 64
+        out_features: 128
+        activation: "silu"
+    # Output: u_t [B, 128]
+
+  # Transition Model Fψ (Markov world model)
+  transition:
+    # SPEC: BOTH action token AND FiLM conditioning (not "add")
+    action_conditioning:
+      action_token: true  # Append u_proj as 257th token
+      action_token_projection: 512  # Project u_t [B,128] -> [B,512]
+
+      film: true  # FiLM conditioning per transformer block
+      film_hidden_dim: 128  # Input u_t [B,128]
+      film_output_dim: 1024  # 2×D = 2×512 for (gamma, beta)
+      # Each block computes (γ, β) from u_t and applies: x = (1 + γ) * x + β
+
+    # Transition Transformer (SPEC EXACT)
+    transformer:
+      num_layers: 6  # SPEC: 6 layers (deeper than encoder)
+      hidden_dim: 512  # D
+      num_heads: 8
+      ffn_dim: 2048  # 4×D
+      dropout: 0.1
+      attention_dropout: 0.1
+      layer_norm_eps: 1.0e-6
+      norm_first: true  # Pre-LN
+
+    # Positional embeddings (per step)
+    positional_embedding:
+      spatial_2d: true  # Add pos_2d to spatial tokens each step
+      action_token_pos: "learned"  # Separate learned pos for action token (or zeros)
+
+    # Output: Drop action token, return [B, 256, 512] spatial tokens
+
+# Training hyperparameters
+training:
+  # Optimization
+  max_epochs: 50
+  learning_rate: 1.0e-4
+  weight_decay: 0.05
+  optimizer: "AdamW"
+  betas: [0.9, 0.95]  # Standard for vision transformers
+
+  # Learning rate schedule
+  lr_scheduler: "cosine"
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+
+  # Gradient management
+  max_grad_norm: 1.0
+  gradient_accumulation_steps: 1
+
+  # Mixed precision
+  use_amp: true
+  amp_dtype: "bfloat16"
+
+  # Checkpointing
+  checkpoint_every_n_epochs: 5
+  save_top_k: 3
+  monitor_metric: "val/jepa_loss"
+  monitor_mode: "min"
+
+# Loss function (JEPA + anti-collapse, SPEC-ALIGNED)
+loss:
+  # Primary: JEPA prediction loss
+  # SPEC: Cosine distance in embedding space
+  jepa:
+    weight: 1.0
+    distance_type: "cosine"  # L2-normalize, compute 1 - cos(pred, target)
+    per_step_weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]  # w_k for H=6 steps (uniform)
+    reduction: "mean"  # Mean over tokens
+
+  # CRITICAL: Anti-collapse regularizer (VC-Reg style)
+  # SPEC: "mandatory to prevent collapse"
+  anticollapse:
+    type: "vcreg"  # Variance-Covariance Regularization
+    # Apply to predicted tokens Z_t (batch×tokens flattened)
+    apply_to: ["z_pred"]  # Can also include ["z_context"] if needed
+
+    # VC-Reg parameters (simplified from VICReg)
+    gamma: 1.0    # Std floor (prevent dimension collapse)
+    alpha: 25.0   # Variance weight (encourage high variance per dim)
+    beta: 1.0     # Covariance weight (penalize off-diagonal covariance)
+    lambda: 0.1   # Overall multiplier for anticollapse loss
+
+    # Note: No "invariance" term (that's for augmented views in VICReg)
+    # JEPA alignment is already handled by cosine distance pred vs target
+
+  # Spatial smoothness: DISABLED by default
+  # Enable only if checkerboard artifacts appear
+  spatial_smooth:
+    enabled: false
+    weight: 0.0
+    type: "total_variation"
+
+# Logging and monitoring
+logging:
+  project_name: "siad-world-model"
+  experiment_name: "bay-area-v03-spec-exact"
+  log_every_n_steps: 50
+  log_gradients: false
+  log_weights: false
+
+  # Metrics to track
+  metrics:
+    # Loss components
+    - "train/jepa_loss"
+    - "train/anticollapse_loss"
+    - "train/total_loss"
+    - "val/jepa_loss"
+    - "val/anticollapse_loss"
+    - "val/total_loss"
+
+    # Collapse monitoring (CRITICAL - watch these!)
+    - "val/token_variance"      # Target: stay >0.1 (watch, not hard threshold)
+    - "val/token_covariance"    # Target: stay <0.5 (watch, not hard threshold)
+    - "val/token_std_mean"      # Mean std across dimensions
+    - "val/token_std_min"       # Min std (detect if any dim collapses to 0)
+
+    # Training dynamics
+    - "lr"                      # Learning rate
+    - "ema_tau"                 # Target encoder momentum (should ramp 0.99 -> 0.999)
+    - "grad_norm"               # Gradient norm
+
+    # Data quality
+    - "batch/s2_valid_frac_mean"  # Mean cloud coverage per batch
+    - "batch/action_magnitude"    # Monitor action distribution (not all zeros!)
+
+# Reproducibility
+seed: 42
+deterministic: true
+benchmark: false
+
+# Hardware configuration
+hardware:
+  accelerator: "gpu"
+  devices: 1  # Single GPU for baseline
+  precision: "bf16-mixed"
+  strategy: "auto"
+
+# Distributed training (optional)
+distributed:
+  enabled: false
+  strategy: "ddp"
+  find_unused_parameters: false
+
+# Validation strategy
+validation:
+  check_val_every_n_epoch: 1
+  val_batches_per_epoch: null  # Use all validation data
+
+  # Quality-stratified evaluation
+  stratify_by_quality: true
+  quality_bins:
+    - name: "high_quality"
+      min_s2_valid_frac: 0.7
+    - name: "medium_quality"
+      min_s2_valid_frac: 0.4
+      max_s2_valid_frac: 0.7
+    - name: "low_quality"
+      min_s2_valid_frac: 0.3
+      max_s2_valid_frac: 0.4
+
+# Early stopping (optional)
+early_stopping:
+  enabled: false  # Disable for baseline
+  monitor: "val/jepa_loss"
+  patience: 10
+  min_delta: 1.0e-4
+
+# IMPORTANT TRAINING NOTES:
+# 1. Train with OBSERVED actions (real weather data), NOT zeros
+# 2. Neutral scenario (a=0) is for INFERENCE counterfactuals only (see detector.yaml)
+# 3. Model learns: "given X_t and observed weather actions, predict future tokens"
+# 4. At inference: compare neutral (a=0) predictions vs observed to compute residuals
+# 5. No pixel decoder (GLP) during training - residuals computed in token space

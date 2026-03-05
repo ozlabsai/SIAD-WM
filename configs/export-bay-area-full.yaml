@@ -1,0 +1,50 @@
+# SIAD Large Export Configuration - Bay Area Extended
+# ~37k samples for production training
+
+aoi:
+  aoi_id: "bay-area-extended-v03"
+  bounds:
+    # San Francisco Bay Area - Extended coverage
+    # ~72km × 72km ≈ 784 tiles (28×28 grid)
+    # UTM Zone 10N for accurate tiling
+    min_lon: -123.0
+    max_lon: -121.5
+    min_lat: 36.9
+    max_lat: 38.0
+  projection: "EPSG:32610"  # UTM Zone 10N (spec-compliant)
+  resolution_m: 10
+  tile_size_px: 256
+
+data:
+  gcp_project: "siad-earth-engine"
+  gcs_bucket: "siad-exports"
+  export_path: "gs://siad-exports/siad/{aoi_id}"
+  start_month: "2021-01"
+  end_month: "2024-12"  # 48 months (4 years)
+  sources:
+    - "s1"      # Sentinel-1 SAR
+    - "s2"      # Sentinel-2 optical
+    - "viirs"   # VIIRS nighttime lights
+    - "chirps"  # CHIRPS precipitation
+
+# Expected output:
+# - 28 × 28 = 784 tiles
+# - 48 months per tile
+# - 784 × 48 = 37,632 tile-month frames
+# - 784 × 42 = 32,928 training windows (with H=6 rollout)
+
+model:
+  latent_dim: 512  # Correct token_dim per spec
+  context_length: 1  # Single-frame context (Markov)
+  rollout_horizon: 6
+  batch_size: 16
+  epochs: 50
+  learning_rate: 1.0e-4
+  seed: 42
+
+detection:
+  percentile_threshold: 99.0
+  persistence_months: 2
+  min_cluster_size: 3
+  scenarios:
+    - "neutral"
