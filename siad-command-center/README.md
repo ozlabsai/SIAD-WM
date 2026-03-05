@@ -1,212 +1,587 @@
 # SIAD Command Center
 
-**Tactical Satellite Intelligence Interface** - Palantir/Anduril-style demo for SIAD World Model
+**Satellite Intelligence Anomaly Detection - Command & Control Interface**
 
-![Status: In Development](https://img.shields.io/badge/status-in%20development-yellow)
-![Model: Medium 374M](https://img.shields.io/badge/model-medium%20374M-blue)
-![Val Loss: 0.0131](https://img.shields.io/badge/val%20loss-0.0131-green)
+A professional web application for detecting and analyzing infrastructure changes from multi-modal satellite imagery using AI-powered anomaly detection.
 
-## 🎯 Vision
+![SIAD Command Center](docs/screenshot.png)
 
-A command center-style interface showcasing the SIAD World Model's ability to predict satellite imagery 6 months into the future. Built with a Palantir/Anduril tactical aesthetic featuring:
+## Overview
 
-- 🗺️ **Interactive hex grid map** of SF Bay Area tiles
-- 📊 **Model quality gallery** (best/worst/average predictions)
-- 🎮 **Real-time inference** via FastAPI backend
-- 🎨 **Dark tactical UI** with hex grids and glowing accents
-- 📈 **Metrics dashboard** with loss graphs and confidence heatmaps
+SIAD Command Center provides real-time detection and analysis of infrastructure anomalies from satellite data. The system combines SAR (Synthetic Aperture Radar), optical, and thermal satellite imagery with a world model to identify unexpected changes indicative of construction, urban development, or infrastructure expansion.
 
-## 🏗️ Architecture
+### Key Features
 
-```
-┌─────────────────┐         ┌──────────────────┐         ┌────────────────┐
-│   Frontend      │  HTTP   │   FastAPI        │  PyTorch│   SIAD Model   │
-│   React + Three ├────────>│   Backend        ├────────>│   + Decoder    │
-│   (Port 3000)   │<────────│   (Port 8000)    │<────────│   (GPU/CPU)    │
-└─────────────────┘         └──────────────────┘         └────────────────┘
-      │                            │                             │
-      │ WebGL Hex Map              │ Model Loading               │ Checkpoints
-      │ Timeline Scrubber          │ Inference Pipeline          │ - Medium 374M
-      │ Metrics Display            │ Gallery Curation            │ - Decoder
-      └────────────────────────────┴─────────────────────────────┘
-```
+- **Automated Anomaly Detection**: ML-powered detection of infrastructure changes from satellite residuals
+- **Interactive Map Visualization**: Mapbox-powered interface showing hotspot locations
+- **Temporal Timeline**: Playback and scrubbing through months of satellite data
+- **Detailed Analytics**: Per-tile analysis with timeline charts, heatmaps, and modality attribution
+- **Filtering & Search**: Dynamic filtering by score, date range, change type, and tile ID
+- **Data Export**: Export detections as GeoJSON or CSV for downstream analysis
+- **Professional UI**: Lattice-style dark interface designed for operations centers
 
-## 📁 Project Structure
+### Technology Stack
 
-```
-siad-command-center/
-├── api/                          # FastAPI Backend
-│   ├── main.py                   # API server + endpoints
-│   ├── routes/
-│   │   ├── tiles.py             # Tile management
-│   │   ├── predict.py           # Model inference
-│   │   └── gallery.py           # Curated predictions
-│   └── services/
-│       ├── model_loader.py      # Model management
-│       ├── inference.py         # Inference pipeline
-│       └── gallery.py           # Gallery curation
-│
-├── frontend/                     # React Frontend
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Gallery/         # Prediction showcase
-│   │   │   ├── HexMap/          # 3D hex tile map
-│   │   │   ├── Timeline/        # 6-month scrubber
-│   │   │   ├── Metrics/         # Loss/confidence dashboard
-│   │   │   └── Layout/          # Tactical panels
-│   │   ├── lib/
-│   │   │   ├── api.ts           # Backend client
-│   │   │   └── three-utils.ts   # WebGL helpers
-│   │   └── styles/
-│   │       ├── tokens.json      # Design system
-│   │       └── tactical.css     # Palantir/Anduril theme
-│   └── package.json
-│
-└── scripts/
-    └── generate_gallery.py      # Pre-compute predictions
-```
+**Frontend:**
+- Next.js 14 (React 18)
+- TypeScript
+- Mapbox GL JS (map rendering)
+- Recharts (data visualization)
+- TanStack Query (data fetching)
+- Tailwind CSS (styling)
 
-## 🚀 Quick Start
+**Backend:**
+- FastAPI (Python 3.13+)
+- HDF5 (data storage)
+- NumPy (array operations)
+- Uvicorn (ASGI server)
+
+---
+
+## Quick Start
 
 ### Prerequisites
 
-- Python 3.13+
-- Node.js 18+
-- CUDA GPU (recommended) or CPU
-- Trained SIAD medium model checkpoint
-- Trained decoder checkpoint
+- **Python 3.13+** (managed via `uv`)
+- **Node.js 18+** and npm
+- **Mapbox Access Token** (optional, for basemaps)
 
-### Backend Setup
+### 1. Clone Repository
 
 ```bash
-cd siad-command-center/api
-
-# Install dependencies
-pip install fastapi uvicorn torch pyyaml rasterio numpy
-
-# Set paths to checkpoints
-export MODEL_CHECKPOINT=../../checkpoints/checkpoint_best.pth
-export DECODER_CHECKPOINT=../../checkpoints/decoder_best.pth
-
-# Run server
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+git clone <repository-url>
+cd siad-command-center
 ```
 
-### Frontend Setup
+### 2. Setup Backend
 
 ```bash
-cd siad-command-center/frontend
+# Install UV package manager (if not installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install dependencies
+# Backend dependencies are managed by UV
+# Data files should be in data/ directory
+```
+
+### 3. Setup Frontend
+
+```bash
+cd frontend
 npm install
 
-# Start dev server
+# Optional: Configure Mapbox token
+echo "NEXT_PUBLIC_MAPBOX_TOKEN=your_token_here" > .env.local
+```
+
+### 4. Run Backend API
+
+```bash
+# From project root
+uv run uvicorn api.main:app --reload --port 8001
+```
+
+Backend will be available at `http://localhost:8001`
+
+API docs at `http://localhost:8001/docs`
+
+### 5. Run Frontend
+
+```bash
+cd frontend
 npm run dev
 ```
 
-Visit `http://localhost:3000` for the command center interface.
+Frontend will be available at `http://localhost:3000`
 
-## 🎨 Design System
+### 6. Access Application
 
-### Color Palette
+Open your browser to `http://localhost:3000`
 
-| Color | Hex | Usage |
-|-------|-----|-------|
-| Background Primary | `#0a0a0a` | Main background |
-| Background Secondary | `#1a1a1a` | Panels/cards |
-| Accent Cyan | `#14b8a6` | Hover states, highlights |
-| Accent Amber | `#f59e0b` | Selected states, active |
-| Text Primary | `#f5f5f5` | Main text |
-| Text Dim | `#737373` | Secondary text |
+---
 
-### Typography
+## Project Structure
 
-- **Mono**: JetBrains Mono (data, code, metrics)
-- **UI**: Inter (labels, body text)
-- **Display**: Rajdhani (headers, tactical text)
+```
+siad-command-center/
+├── api/                      # FastAPI backend
+│   ├── main.py              # Application entry point
+│   ├── config.py            # Configuration
+│   ├── models/              # Data models (Pydantic schemas)
+│   ├── routes/              # API endpoints
+│   │   ├── aoi.py          # AOI metadata
+│   │   ├── detection.py    # Hotspot detection
+│   │   └── tiles.py        # Tile details
+│   └── services/            # Business logic
+│       └── data_loader.py  # HDF5 data loading
+│
+├── frontend/                 # Next.js frontend
+│   ├── app/                 # Next.js app directory
+│   │   ├── page.tsx        # Main dashboard
+│   │   ├── layout.tsx      # Root layout
+│   │   └── providers.tsx   # React Query provider
+│   ├── components/          # React components
+│   │   ├── MapView.tsx           # Mapbox map
+│   │   ├── DetectionsRail.tsx    # Hotspot list sidebar
+│   │   ├── TimelinePlayer.tsx    # Timeline controls
+│   │   ├── TileDetailModal.tsx   # Detail view modal
+│   │   ├── FilterPanel.tsx       # Filtering controls
+│   │   └── MapLegend.tsx         # Map legend
+│   ├── lib/                 # Utilities
+│   │   ├── api.ts          # API client
+│   │   └── utils.ts        # Helper functions
+│   ├── types/               # TypeScript types
+│   │   └── index.ts        # Shared types
+│   └── tests/               # Test suites
+│       └── e2e/            # Playwright E2E tests
+│
+├── data/                     # Data storage
+│   ├── residuals_test.h5    # HDF5 residuals data
+│   └── aoi_sf_seed/         # Seed dataset
+│       ├── hotspots_ranked.json
+│       ├── metadata.json
+│       ├── months.json
+│       └── tiles/           # Per-tile data
+│
+├── scripts/                  # Utility scripts
+│   ├── generate_test_dataset.py
+│   ├── create_seed_dataset.py
+│   ├── validate_demo_data.py
+│   └── ...
+│
+├── tests/                    # Backend tests
+│   ├── test_integration.py  # API integration tests
+│   └── test_performance.py  # Performance benchmarks
+│
+├── docs/                     # Documentation
+├── DEMO_SCRIPT.md           # 2-minute demo walkthrough
+├── ARCHITECTURE.md          # System architecture
+├── TROUBLESHOOTING.md       # Common issues
+└── README.md                # This file
+```
 
-### Components
+---
 
-- **Hex Buttons**: Sharp corners, 1px cyan border, glow on hover
-- **Panels**: Dark glass effect with backdrop blur
-- **Cards**: Hover → cyan outline, Selected → amber fill
-- **Badges**: Uppercase, wide letter-spacing, status colors
+## Usage Guide
 
-## 📊 Model Performance
+### Basic Workflow
 
-| Metric | Value |
-|--------|-------|
-| Model Size | Medium (374M params) |
-| Validation Loss | 0.0131 |
-| Dataset | 21 tiles × 48 months |
-| Training Time | ~20 minutes (A100 80GB) |
-| Decoder PSNR | TBD (training) |
+1. **View Hotspots**: Detection rail on right shows ranked anomalies
+2. **Select Hotspot**: Click card or map marker to view details
+3. **Analyze**: Modal shows timeline, imagery, and attribution
+4. **Filter**: Adjust score threshold, date range, or search by tile ID
+5. **Export**: Download filtered results as GeoJSON or CSV
+6. **Playback**: Use timeline player to watch temporal evolution
 
-## 🔧 API Endpoints
+### Filtering Options
 
-### Tiles
+- **Score Threshold**: Minimum anomaly score (0.0 - 1.0)
+- **Date Range**: Start and end months
+- **Search**: Filter by tile ID (e.g., "tile 1", "tile 2")
+- **Alert Type**: All / Critical / High / Elevated
+- **Confidence**: All / High / Medium / Low
 
-- `GET /api/tiles` - List all available tiles
-- `GET /api/tiles/{tile_id}` - Get tile metadata
+### Timeline Playback
 
-### Inference
+- **Play/Pause**: Automatic month-by-month playback
+- **Speed**: 1x, 2x, 4x playback speed
+- **Scrub**: Click timeline bar to jump to specific month
+- **Filter**: Map updates to show hotspots for current month
 
-- `POST /api/predict` - Run 6-month prediction
-  ```json
+### Export Formats
+
+**GeoJSON:**
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [lon, lat]
+      },
+      "properties": {
+        "tileId": "tile_1",
+        "score": 0.946,
+        "month": "Month 3",
+        "changeType": "urban_construction",
+        ...
+      }
+    }
+  ]
+}
+```
+
+**CSV:**
+```csv
+Tile ID,Score,Latitude,Longitude,Month,Change Type,Region,Confidence,Alert Type
+tile_1,0.946,49.182815,-130.949542,Month 3,urban_construction,temperate,High,Critical
+```
+
+---
+
+## API Reference
+
+### Base URL
+
+```
+http://localhost:8001
+```
+
+### Endpoints
+
+#### Health Check
+
+```http
+GET /health
+```
+
+Returns API health status.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "service": "SIAD Command Center API",
+  "version": "1.0.0"
+}
+```
+
+#### Get AOI Metadata
+
+```http
+GET /api/aoi
+```
+
+Returns Area of Interest metadata.
+
+**Response:**
+```json
+{
+  "name": "SF Bay Area",
+  "bounds": [-122.5, 37.2, -121.5, 38.0],
+  "tileCount": 100,
+  "timeRange": ["2024-01", "2024-12"]
+}
+```
+
+#### List Hotspots
+
+```http
+GET /api/detect/hotspots?min_score=0.5&limit=100
+```
+
+Returns list of detected hotspots.
+
+**Query Parameters:**
+- `min_score` (float): Minimum anomaly score (default: 0.5)
+- `limit` (int): Maximum results (default: 100)
+
+**Response:**
+```json
+[
   {
-    "tile_id": "tile_x000_y000",
-    "start_month": "2024-01",
-    "actions": [[0.0, 0.0], [0.1, 0.0], ...]  // Optional
+    "tileId": "tile_1",
+    "score": 0.946,
+    "lat": 49.182815,
+    "lon": -130.949542,
+    "month": "Month 3",
+    "changeType": "urban_construction",
+    "region": "temperate",
+    "confidence": "High",
+    "alert_type": "Critical"
   }
-  ```
+]
+```
 
-### Gallery
+#### Get Tile Detail
 
-- `GET /api/gallery?category=best&limit=15` - Get curated predictions
-- `POST /api/gallery/generate` - Generate gallery (long-running)
+```http
+GET /api/detect/tile/{tile_id}
+```
 
-## 🎯 Roadmap
+Returns detailed analysis for specific tile.
 
-### Phase 1: Foundation ✅
-- [x] Decoder architecture
-- [x] FastAPI backend skeleton
-- [x] Design system tokens
-- [x] Model service
+**Response:**
+```json
+{
+  "tileId": "tile_1",
+  "metadata": {
+    "lat": 49.182815,
+    "lon": -130.949542,
+    "region": "temperate",
+    "changeType": "urban_construction",
+    "onset": "Month 4"
+  },
+  "timeline": [
+    {
+      "month": "Month 1",
+      "score": 0.318,
+      "timestamp": "2024-01"
+    }
+  ]
+}
+```
 
-### Phase 2: Core Features 🚧
-- [ ] Gallery curation service
-- [ ] Inference pipeline
-- [ ] Hex map visualization
-- [ ] Timeline scrubber
-- [ ] Metrics dashboard
+---
 
-### Phase 3: Polish & Deploy
-- [ ] Integration testing
-- [ ] Performance optimization
-- [ ] Docker deployment
-- [ ] HuggingFace Spaces hosting
+## Development
 
-## 🤝 Multi-Agent Development
+### Running Tests
 
-This project is built by a team of 8 specialized agents:
+**Backend Integration Tests:**
+```bash
+uv run pytest tests/test_integration.py -v
+```
 
-| Agent | Role | Status |
-|-------|------|--------|
-| Agent 1 | Decoder Architect | ✅ Complete |
-| Agent 2 | Backend Engineer | 🚧 In Progress |
-| Agent 3 | Frontend Architect | ✅ Design Complete |
-| Agent 4 | Gallery Engineer | 🚧 In Progress |
-| Agent 5 | Map Visualization | 🚧 In Progress |
-| Agent 6 | Timeline Engineer | ⏳ Pending |
-| Agent 7 | Metrics Dashboard | ⏳ Pending |
-| Agent 8 | Integration Engineer | ⏳ Pending |
+**Backend Performance Tests:**
+```bash
+uv run pytest tests/test_performance.py -v
+```
 
-## 📝 License
+**Frontend E2E Tests:**
+```bash
+cd frontend
+npm run test:e2e
+```
 
-MIT License - See LICENSE file for details
+**Frontend E2E Tests (UI Mode):**
+```bash
+cd frontend
+npm run test:e2e:ui
+```
 
-## 🙏 Acknowledgments
+### Linting
 
-- SIAD World Model team
-- Palantir/Anduril for UI inspiration
-- HuggingFace for model hosting
+**Frontend:**
+```bash
+cd frontend
+npm run lint
+```
+
+**Backend:**
+```bash
+uv run ruff check .
+```
+
+### Building for Production
+
+**Frontend:**
+```bash
+cd frontend
+npm run build
+npm run start
+```
+
+**Backend:**
+```bash
+uv run uvicorn api.main:app --host 0.0.0.0 --port 8001
+```
+
+---
+
+## Data Format
+
+### HDF5 Structure
+
+```
+residuals_test.h5
+├── metadata/
+│   └── aoi (JSON string)
+└── tiles/
+    ├── 1/
+    │   ├── residuals (float32, shape: [months, height, width, channels])
+    │   ├── timestamps (int64, shape: [months])
+    │   └── coordinates (float32, shape: [2])
+    └── 2/
+        └── ...
+```
+
+### Hotspots JSON
+
+```json
+{
+  "hotspots": [
+    {
+      "tile_id": 1,
+      "month": 3,
+      "change_type": "urban_construction",
+      "location": {"lat": 49.18, "lon": -130.95},
+      "region_id": 16,
+      "size_pixels": 3,
+      "mean_score": 0.944,
+      "max_score": 0.946,
+      "severity": "critical"
+    }
+  ],
+  "total_count": 9
+}
+```
+
+---
+
+## Performance
+
+### Target Metrics
+
+- **Time to Interactive**: <3s
+- **API Response Times**:
+  - Health check: <50ms
+  - AOI metadata: <100ms
+  - Hotspot list (100): <500ms
+  - Tile detail: <200ms
+- **Frontend Bundle Size**: <1MB
+- **Map Rendering**: 60fps
+- **Large Dataset**: <2s for 1000 hotspots
+
+### Optimization Tips
+
+1. **Backend**: Use HDF5 caching for frequently accessed tiles
+2. **Frontend**: Lazy load map markers with clustering
+3. **Network**: Enable gzip compression on API responses
+4. **Images**: Use WebP format for tile imagery
+
+---
+
+## Deployment
+
+### Docker (Recommended)
+
+Coming soon - Docker Compose configuration for one-command deployment.
+
+### Manual Deployment
+
+**Backend:**
+```bash
+# Use production ASGI server
+uv run gunicorn api.main:app -w 4 -k uvicorn.workers.UvicornWorker -b 0.0.0.0:8001
+```
+
+**Frontend:**
+```bash
+# Build and serve
+cd frontend
+npm run build
+npm run start
+```
+
+**Reverse Proxy (Nginx):**
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location /api {
+        proxy_pass http://localhost:8001;
+    }
+
+    location / {
+        proxy_pass http://localhost:3000;
+    }
+}
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**Backend not starting:**
+```bash
+# Check Python version
+python --version  # Should be 3.13+
+
+# Check data files exist
+ls data/residuals_test.h5
+
+# Check port not in use
+lsof -i :8001
+```
+
+**Frontend not loading:**
+```bash
+# Check Node version
+node --version  # Should be 18+
+
+# Clear Next.js cache
+cd frontend
+rm -rf .next
+npm run dev
+```
+
+**Map not rendering:**
+- Check Mapbox token in `frontend/.env.local`
+- Hotspots will still be visible without basemap
+
+**No hotspots showing:**
+- Verify backend is running and healthy: `curl http://localhost:8001/health`
+- Check browser console for API errors
+- Verify data files exist in `data/aoi_sf_seed/`
+
+See [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for more details.
+
+---
+
+## Demo
+
+Follow the [DEMO_SCRIPT.md](DEMO_SCRIPT.md) for a comprehensive 2-minute walkthrough of all features.
+
+**Quick demo:**
+```bash
+# Terminal 1: Start backend
+uv run uvicorn api.main:app --reload --port 8001
+
+# Terminal 2: Start frontend
+cd frontend && npm run dev
+
+# Browser: Open http://localhost:3000
+# 1. View hotspots in detection rail
+# 2. Click top hotspot to see details
+# 3. Adjust filters and observe changes
+# 4. Click Play on timeline
+# 5. Export data as GeoJSON
+```
+
+---
+
+## Contributing
+
+This is a demonstration project for the SIAD system. For questions or contributions, please contact the development team.
+
+### Development Guidelines
+
+1. **Code Style**: Follow existing patterns (TypeScript for frontend, Python type hints for backend)
+2. **Tests**: Add tests for new features
+3. **Documentation**: Update relevant docs when changing functionality
+4. **Commits**: Use clear, descriptive commit messages
+
+---
+
+## License
+
+[Your License Here]
+
+---
+
+## Acknowledgments
+
+- **Satellite Data**: [Data source acknowledgment]
+- **World Model**: [Model acknowledgment]
+- **Design**: Inspired by Lattice operations interfaces
+- **Stack**: Built with FastAPI, Next.js, Mapbox, and modern web technologies
+
+---
+
+## Contact
+
+For questions, issues, or feedback:
+- Email: [your-email@example.com]
+- GitHub Issues: [repository-url]/issues
+- Documentation: [docs-url]
+
+---
+
+**Version:** 1.0.0
+**Last Updated:** 2025-03-04
+**Status:** Production Demo Ready

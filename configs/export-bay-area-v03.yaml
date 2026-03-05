@@ -1,0 +1,197 @@
+# SIAD Export Configuration v0.3
+# Bay Area Extended - Multi-Modal Satellite Data Export
+# Spec-compliant with JEPA World Model requirements
+
+version:
+  config_version: "0.3"
+  model_spec_version: "0.2"
+  band_order_version: "v1"
+  preprocessing_version: "v2"  # Added cloud probability + richer actions
+
+aoi:
+  aoi_id: "bay-area-extended-v03"
+  bounds:
+    # San Francisco Bay Area - Extended coverage
+    # UTM Zone 10N (EPSG:32610) for accurate tiling and minimal distortion
+    # Note: Using UTM instead of Web Mercator to ensure:
+    #   - Accurate area calculations for tiles
+    #   - Consistent pixel spacing across the AOI
+    #   - Better alignment with Sentinel-2 native projection
+    min_lon: -123.0
+    max_lon: -121.5
+    min_lat: 36.9
+    max_lat: 38.0
+  projection: "EPSG:32610"  # UTM Zone 10N (NAD83)
+  resolution_m: 10
+  tile_size_px: 256  # 2.56km per tile
+
+  # Computed coverage (for validation):
+  # Approximate grid: 28 × 28 = 784 tiles
+  # At 2.56km per tile: ~72km × 72km coverage
+
+data:
+  gcp_project: "siad-earth-engine"
+  gcs_bucket: "siad-exports"
+  export_path: "gs://siad-exports/siad/{aoi_id}"
+
+  # Temporal coverage
+  start_month: "2021-01"
+  end_month: "2024-12"  # 48 months total
+
+  # Expected export counts:
+  # - num_tiles: 784
+  # - num_months: 48
+  # - num_frames: 784 × 48 = 37,632 tile-month frames
+  # - num_training_windows: 784 × (48 - 6) = 32,928 (with H=6 rollout)
+
+  # Multi-modal sources (order matters for band stacking)
+  sources:
+    - "s2"      # Sentinel-2 SR (bands B2, B3, B4, B8 + cloud_probability)
+    - "s1"      # Sentinel-1 GRD (VV, VH in dB, normalized)
+    - "viirs"   # VIIRS DNB monthly (avg_rad, log-normalized)
+    - "chirps"  # CHIRPS daily precipitation (monthly aggregation)
+
+  # Band order contract (C=8 base + optional C=9 with cloud_prob)
+  # Fixed ordering for v1 compatibility:
+  band_order:
+    - name: "S2_B2"
+      index: 0
+      description: "Sentinel-2 Blue (10m)"
+      normalization: "reflectance_0_1"  # SR / 10000
+    - name: "S2_B3"
+      index: 1
+      description: "Sentinel-2 Green (10m)"
+      normalization: "reflectance_0_1"
+    - name: "S2_B4"
+      index: 2
+      description: "Sentinel-2 Red (10m)"
+      normalization: "reflectance_0_1"
+    - name: "S2_B8"
+      index: 3
+      description: "Sentinel-2 NIR (10m)"
+      normalization: "reflectance_0_1"
+    - name: "S1_VV_db_norm"
+      index: 4
+      description: "Sentinel-1 VV backscatter (dB, normalized)"
+      normalization: "linear_clamp"  # (dB - (-25)) / (0 - (-25)), range [-25, 0] -> [0, 1]
+    - name: "S1_VH_db_norm"
+      index: 5
+      description: "Sentinel-1 VH backscatter (dB, normalized)"
+      normalization: "linear_clamp"  # Same as VV
+    - name: "VIIRS_avg_rad_norm"
+      index: 6
+      description: "VIIRS nighttime lights (log-normalized)"
+      normalization: "percentile_clip"  # log1p -> clip [p1, p99] -> [0, 1]
+    - name: "S2_valid_mask"
+      index: 7
+      description: "Sentinel-2 valid pixel mask (binary)"
+      normalization: "none"  # 0 or 1
+    # Optional 9th channel (if available from S2_CLOUD_PROBABILITY):
+    - name: "S2_cloud_prob_norm"
+      index: 8
+      description: "Sentinel-2 cloud probability (normalized)"
+      normalization: "probability_0_1"  # cloud_prob / 100
+      optional: true
+
+  # Sentinel-1 processing parameters
+  s1_config:
+    instrument_mode: "IW"
+    orbit_pass: "ASCENDING"  # Use consistent orbit for temporal stability
+    polarization: ["VV", "VH"]
+    db_range: [-25, 0]  # Clamp and normalize to [0, 1]
+
+  # Sentinel-2 processing parameters
+  s2_config:
+    cloud_threshold: 50  # Mask pixels with cloud_prob > 50%
+    min_valid_fraction: 0.3  # Tile-month must have ≥30% valid pixels
+    bands: ["B2", "B3", "B4", "B8"]
+    scale_factor: 10000  # SR reflectance scaling
+
+  # VIIRS processing parameters
+  viirs_config:
+    band: "avg_rad"
+    normalization: "log_percentile"
+    percentile_range: [1, 99]  # AOI-level robust clipping
+    log_transform: "log1p"  # log(1 + x) for dynamic range
+
+  # CHIRPS processing parameters (for actions)
+  chirps_config:
+    aggregation: "monthly_sum"  # Sum daily precip to monthly total (mm)
+    climatology_window: "2015-01_2024-12"  # 10-year climatology for anomaly
+    anomaly_method: "z_score"  # (P_t - μ_m) / (σ_m + 1e-6)
+    # Outputs per tile-month:
+    #   - precip_abs: monthly total precipitation (mm)
+    #   - precip_anom: z-scored anomaly relative to month-of-year climatology
+
+  # Action schema (per tile-month)
+  # Shape: [B, A] where A ≥ 4
+  action_fields:
+    - name: "rain_anom"
+      index: 0
+      description: "Precipitation anomaly (z-score)"
+      source: "chirps"
+      computation: "z_score_vs_climatology"
+    - name: "precip_abs"
+      index: 1
+      description: "Absolute monthly precipitation (mm, normalized)"
+      source: "chirps"
+      computation: "monthly_sum_normalized"  # Scale to [0, 1] using AOI max
+    - name: "month_sin"
+      index: 2
+      description: "Temporal conditioning: sin(2π * month / 12)"
+      source: "temporal"
+      computation: "sin_encoding"
+    - name: "month_cos"
+      index: 3
+      description: "Temporal conditioning: cos(2π * month / 12)"
+      source: "temporal"
+      computation: "cos_encoding"
+    # Reserved slots for future actions (temp_anom, etc.):
+    - name: "temp_anom"
+      index: 4
+      description: "Temperature anomaly (optional, ERA5)"
+      source: "era5"
+      computation: "z_score_vs_climatology"
+      optional: true
+
+  # Quality metadata (per tile-month)
+  quality_fields:
+    - name: "s2_valid_frac"
+      description: "Fraction of valid S2 pixels after cloud masking"
+      range: [0, 1]
+      min_threshold: 0.3
+    - name: "s2_cloud_mean"
+      description: "Mean cloud probability over tile (pre-mask)"
+      range: [0, 100]
+    - name: "s1_coverage"
+      description: "S1 observation count in month"
+      range: [0, 50]  # Typical S1 revisit
+    - name: "viirs_coverage"
+      description: "VIIRS valid observations"
+      range: [0, 1]  # Monthly composite availability
+
+# Export execution settings
+export:
+  max_concurrent_tasks: 100  # Earth Engine task limit
+  retry_failed: true
+  retry_max_attempts: 3
+  output_format: "GeoTIFF"
+  geotiff_options:
+    cloud_optimized: true
+    compression: "DEFLATE"
+    predictor: 2  # Horizontal differencing for better compression
+
+# Manifest schema
+manifest:
+  format: "jsonl"
+  path: "gs://siad-exports/siad/{aoi_id}/manifest.jsonl"
+  fields:
+    - tile_id
+    - tile_x_idx
+    - tile_y_idx
+    - month
+    - gcs_uri
+    - actions  # JSON object with action_fields
+    - quality  # JSON object with quality_fields
+    - export_timestamp
+    - ee_task_id

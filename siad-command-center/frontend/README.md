@@ -1,237 +1,174 @@
 # SIAD Command Center - Frontend
 
-Modern React + TypeScript + Vite application for the Satellite Intelligence & Action Dashboard tactical demo.
+Next.js 14 application with Anduril Lattice-inspired dark UI for satellite-based infrastructure change detection.
+
+## Features
+
+- **Map-First Layout**: Full-screen Mapbox GL JS map with SF Bay Area focus
+- **Detections Rail**: Scrollable sidebar with ranked hotspot cards
+- **Timeline Player**: Interactive month scrubber with playback controls
+- **Dark Theme**: High-contrast Anduril Lattice-style design (no gradients/glows)
+- **Real-time Data**: React Query integration with backend API
+- **TypeScript**: Full type safety throughout
+
+## Prerequisites
+
+- Node.js 18+ and npm
+- Backend API running at http://localhost:8001
+- Mapbox account (optional - for actual map tiles)
+
+## Quick Start
+
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+2. **Configure environment:**
+   ```bash
+   # Edit .env.local and add your Mapbox token (optional)
+   NEXT_PUBLIC_API_URL=http://localhost:8001
+   NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token_here
+   ```
+
+3. **Start development server:**
+   ```bash
+   npm run dev
+   ```
+
+4. **Open browser:**
+   ```
+   http://localhost:3000
+   ```
 
 ## Project Structure
 
 ```
 frontend/
-├── src/
-│   ├── components/
-│   │   ├── Gallery/          # Satellite imagery gallery
-│   │   ├── HexMap/           # 3D hexagonal map visualization
-│   │   ├── Timeline/         # Temporal scrubber component
-│   │   ├── Metrics/          # Model metrics display
-│   │   └── Layout/           # Layout components (Header, Sidebar, Footer)
-│   ├── lib/
-│   │   ├── api.ts            # Type-safe Axios API client
-│   │   └── types.ts          # TypeScript interfaces
-│   ├── styles/
-│   │   ├── tokens.json       # Design system tokens
-│   │   ├── tactical.css      # Tactical UI system styles
-│   │   └── global.css        # Global styles
-│   ├── App.tsx               # Root component
-│   └── main.tsx              # Entry point
-├── public/                    # Static assets
-├── index.html                 # HTML entry point
-├── package.json               # Dependencies
-├── vite.config.ts            # Vite configuration
-├── tsconfig.json             # TypeScript configuration
-└── README.md                 # This file
+├── app/                  # Next.js App Router
+│   ├── layout.tsx       # Root layout with providers
+│   ├── page.tsx         # Dashboard page
+│   ├── providers.tsx    # React Query provider
+│   └── globals.css      # Lattice dark theme
+├── components/          # React components
+│   ├── MapView.tsx      # Mapbox GL JS map with hotspots
+│   ├── DetectionsRail.tsx   # Hotspot list sidebar
+│   └── TimelinePlayer.tsx   # Month scrubber
+├── lib/                 # Utilities
+│   ├── api.ts          # Backend API client
+│   └── utils.ts        # Helper functions
+└── types/              # TypeScript types
+    └── index.ts        # Shared type definitions
 ```
-
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-
-### Installation
-
-```bash
-# Install dependencies
-npm install
-
-# Create .env.local from .env.example
-cp .env.example .env.local
-```
-
-### Development
-
-```bash
-# Start development server
-npm run dev
-
-# The app will be available at http://localhost:5173
-```
-
-### Building
-
-```bash
-# Build for production
-npm run build
-
-# Preview production build locally
-npm run preview
-```
-
-## Technologies
-
-- **React** 18.3 - UI framework
-- **TypeScript** 5.3 - Type safety
-- **Vite** 5.0 - Build tool
-- **Three.js** 0.160 - 3D graphics
-- **React Three Fiber** 8.15 - React renderer for Three.js
-- **Axios** 1.6 - HTTP client
-- **Tailwind-inspired CSS** - Design system
 
 ## API Integration
 
-The frontend connects to a FastAPI backend at `http://localhost:8000`. Key endpoints:
+The frontend connects to the backend API at `http://localhost:8001`:
 
-- `GET /gallery` - Fetch gallery entries
-- `GET /tiles/{tileId}` - Fetch tile data
-- `GET /predictions/{tileId}` - Get predictions
-- `POST /predictions/{tileId}/predict` - Run inference
-- `GET /climate/actions` - Get climate actions
-- `GET /health` - API health check
+- `GET /api/aoi` - SF Bay metadata
+- `GET /api/detect/hotspots?min_score=0.5&limit=100` - Hotspot list
+- `GET /api/detect/tile/{tile_id}` - Tile detail (not yet implemented in UI)
+- `GET /api/tiles/{tile_id}/assets?month=YYYY-MM` - Imagery URLs (not yet implemented)
 
-See `src/lib/api.ts` for complete API client implementation.
+## UI Components
+
+### MapView
+- Mapbox GL JS dark basemap
+- GeoJSON layer for hotspot markers
+- Color-coded by score (red > 0.7, amber > 0.5, cyan < 0.5)
+- Click to select hotspot
+- Fly-to animation on selection
+
+### DetectionsRail
+- Collapsible 400px sidebar
+- Sorted by score (highest first)
+- Cards show: Tile ID, Score, Confidence, Change Type
+- Empty state with helpful message
+- Selected hotspot highlighted
+
+### TimelinePlayer
+- Bottom bar with month scrubber
+- Play/Pause button
+- Playback speed selector (1x, 2x, 4x)
+- Month markers on slider
+- Auto-advance when playing
 
 ## Design System
 
-The project uses a military/tactical aesthetic with:
+### Colors
+- Background: `#0a0a0a` (pitch black)
+- Panel: `#1a1a1a` (dark gray)
+- Border: `#262626` (subtle)
+- Text Primary: `#ffffff`
+- Text Secondary: `#a3a3a3`
+- Accent: `#22d3ee` (cyan-500)
+- Alert Warning: `#fbbf24` (amber-400)
+- Alert Danger: `#ef4444` (red-500)
 
-- **Colors**: Dark backgrounds (#0a0a0a, #1a1a1a) with cyan (#14b8a6) and amber (#f59e0b) accents
-- **Typography**: Rajdhani (display), Inter (UI), JetBrains Mono (code)
-- **Components**: Hex tiles, timeline scrubber, climate sliders, metric badges
-- **Effects**: Glow shadows, scan line animations, grid overlays
+### Typography
+- Font: Inter (system default)
+- High contrast for readability
+- Monospace for tile IDs
 
-See `src/styles/tokens.json` for complete token definitions.
+### Badges
+- High Confidence: Green
+- Medium Confidence: Yellow
+- Low Confidence: Gray
+- Structural: Blue
+- Activity: Orange
 
-## Component Development
-
-### Creating a New Component
-
-```typescript
-// src/components/MyComponent/index.tsx
-import { MyComponentProps } from './types'
-
-export function MyComponent({ prop1, prop2 }: MyComponentProps) {
-  return (
-    <div className="my-component">
-      {/* Component content */}
-    </div>
-  )
-}
-
-export default MyComponent
-```
-
-### Using the API Client
-
-```typescript
-import { getGallery, getPrediction } from '@/lib/api'
-
-async function loadData() {
-  try {
-    const gallery = await getGallery({ page: 1 })
-    const prediction = await getPrediction(tileId)
-  } catch (error) {
-    console.error('API Error:', error)
-  }
-}
-```
-
-### Using Design Tokens
-
-```tsx
-// Access tokens from tokens.json
-import tokens from '@/styles/tokens.json'
-
-const hexTileColor = tokens.colors.accent.cyan['500']
-```
-
-## Environment Variables
-
-Create `.env.local`:
-
-```env
-VITE_API_URL=http://localhost:8000
-VITE_ENV=development
-VITE_DEBUG=true
-VITE_ENABLE_3D_MAP=true
-```
-
-## Type Safety
-
-The project uses strict TypeScript with comprehensive type definitions:
-
-- `Tile` - Satellite tile data
-- `Prediction` - Model prediction output
-- `GalleryEntry` - Gallery item
-- `ClimateAction` - Climate action tracking
-- `ModelMetrics` - ML model performance
-
-See `src/lib/types.ts` for all type definitions.
-
-## Styling
-
-- **Global styles**: `src/styles/global.css`
-- **Component styles**: `src/styles/tactical.css`
-- **Design tokens**: `src/styles/tokens.json`
-
-Uses utility-first approach with predefined classes from `tactical.css`:
-- `.hex-tile` - Hexagonal tile component
-- `.timeline-scrubber` - Timeline control
-- `.metric-badge` - Metric display badge
-- `.confidence-indicator` - Confidence visualization
-- `.tactical-border` - Styled border with glow
-- `.tactical-grid` - Grid overlay effect
-
-## Performance Optimization
-
-- Lazy component loading with React.lazy
-- Vite chunk splitting for vendor libraries
-- Image optimization for satellite imagery
-- WebGL rendering via Three.js
-
-## Accessibility
-
-- Semantic HTML structure
-- ARIA labels for interactive elements
-- Focus states and keyboard navigation
-- High contrast support
-- Reduced motion preferences respected
-
-## Contributing
-
-When adding new features:
-
-1. Create type definitions in `src/lib/types.ts`
-2. Add API functions to `src/lib/api.ts`
-3. Create component in `src/components/`
-4. Use design tokens from `tokens.json`
-5. Follow existing code style
-
-## Troubleshooting
-
-### API Connection Issues
-
-If you see "Backend Disconnected":
-
-1. Ensure FastAPI server is running on `http://localhost:8000`
-2. Check `VITE_API_URL` in `.env.local`
-3. Verify CORS configuration in backend
-
-### Build Errors
+## Scripts
 
 ```bash
-# Clear dependencies and rebuild
-rm -rf node_modules package-lock.json
-npm install
-npm run build
+npm run dev        # Start development server (port 3000)
+npm run build      # Build for production
+npm run start      # Start production server
+npm run lint       # Run ESLint
 ```
 
-### Development Server Issues
+## Known Issues
 
-```bash
-# Check if port 5173 is available
-# Or specify different port
-npm run dev -- --port 3000
-```
+1. **Mapbox Token**: If not configured, map shows placeholder message
+2. **Tile Details**: Detail view not yet implemented (M3)
+3. **Filters**: Filter controls not yet implemented (M3)
+4. **Export**: GeoJSON export not yet implemented (M3)
+
+## Next Steps (M3)
+
+- [ ] Tile detail modal with timeline chart
+- [ ] Filter controls (score, date range, alert type)
+- [ ] Search functionality
+- [ ] GeoJSON export
+- [ ] Baseline comparison visualization
+- [ ] Mobile responsive improvements
+
+## Dependencies
+
+**Core:**
+- `next@14.2.0` - React framework
+- `react@18.3.0` - UI library
+- `typescript@5` - Type safety
+
+**Data Fetching:**
+- `@tanstack/react-query@5.28.0` - Server state management
+
+**Visualization:**
+- `mapbox-gl@3.1.0` - Interactive maps
+- `recharts@2.12.0` - Charts (for M3)
+
+**UI:**
+- `lucide-react@0.344.0` - Icons
+- `date-fns@3.3.0` - Date formatting
+- `tailwindcss@3.4.0` - Styling
+
+## Development Notes
+
+- Map requires `NEXT_PUBLIC_MAPBOX_TOKEN` for production tiles
+- API calls use React Query for caching and error handling
+- All components are client-side (`'use client'`) for interactivity
+- TypeScript strict mode enabled
+- ESLint with Next.js rules
 
 ## License
 
-Part of the SIAD (Satellite Intelligence & Action Dashboard) project.
+Part of the SIAD project - Infrastructure Acceleration Detector

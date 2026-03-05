@@ -1,0 +1,89 @@
+Component,Type,Label,Context,Notes
+Primary CTA,Button,View Details,Hotspot card/row,Navigate to hotspot detail view
+Export CTA,Button,Export GeoJSON,Dashboard toolbar,Download all visible detections as GeoJSON
+Export CSV,Button,Export CSV,Hotspot detail,Download timeline data as CSV
+Reset Filters,Button,Reset Filters,Filter panel,Clear all active filters and show all hotspots
+Normalize Toggle,Toggle,Normalize Weather,Detection controls,Enable/disable environmental normalization
+Show Baselines,Toggle,Compare Baselines,Detection controls,Show persistence and seasonal baseline comparisons
+Close Modal,Button,Close,Modal header,Dismiss modal or detail view
+Apply Filters,Button,Apply,Filter panel,Apply selected filters
+Cancel,Button,Cancel,Any form/modal,Dismiss without saving
+
+Date Range Field,Form Label,Time Period,Filter panel,"Date range selector for hotspots"
+Date Range Placeholder,Placeholder,Jan 2024 - Dec 2024,Date field,Example date range format
+Score Threshold,Form Label,Minimum Score,Filter panel,Residual score threshold slider
+Score Placeholder,Placeholder,0.5,Score field,Default minimum score
+Alert Type Filter,Form Label,Alert Type,Filter panel,Dropdown for structural/activity/all
+Alert Type Placeholder,Placeholder,All Types,Alert type dropdown,Default selection shows all
+Search Field,Form Label,Search hotspots...,Dashboard search,Free text search
+Search Placeholder,Placeholder,Search by region or tile ID,Search field,Example search queries
+Confidence Filter,Form Label,Confidence Level,Filter panel,High/Medium/Low filter
+Duration Filter,Form Label,Minimum Duration,Filter panel,Months persistence threshold
+
+Initial Load,Loading State,Loading hotspots...,Dashboard mount,Initial data fetch
+Computing Residuals,Loading State,Computing residuals... (Est. 3 seconds),Detection trigger,Residual computation progress
+Fetching Baselines,Loading State,Loading baseline comparisons...,Baseline toggle,Baseline data fetch
+Exporting GeoJSON,Loading State,Exporting 47 hotspots...,Export action,Dynamic count of hotspots
+Generating Report,Loading State,Generating report...,Report generation,Creating HTML report
+Loading Timeline,Loading State,Loading timeline data...,Hotspot detail,Timeline chart loading
+
+Dashboard Title,Heading,SIAD: Infrastructure Acceleration Detector,Main header,Dashboard page title
+Hotspot List Title,Heading,Detected Hotspots,List section,Section heading for hotspot list
+Filter Panel Title,Heading,Filters,Sidebar,Filter controls section
+Timeline Title,Heading,Detection Timeline,Detail view,Timeline chart section
+Baseline Compare Title,Heading,Baseline Comparison,Detail view,Baseline residuals chart section
+Modality Attribution Title,Heading,Modality Attribution,Detail view,SAR/Optical/Lights breakdown
+
+Score Label,Stat Label,Score,Hotspot card,Residual score value
+Confidence Label,Stat Label,Confidence,Hotspot card,High/Medium/Low
+Onset Label,Stat Label,First Detected,Hotspot card,Onset month
+Duration Label,Stat Label,Duration,Hotspot card,Persistence in months
+Alert Type Label,Stat Label,Type,Hotspot card,Structural/Activity
+Tile ID Label,Stat Label,Tile ID,Hotspot detail,Tile identifier
+Coordinates Label,Stat Label,Location,Hotspot detail,Lat/lon coordinates
+
+High Confidence,Badge,High,Confidence indicator,Green badge
+Medium Confidence,Badge,Medium,Confidence indicator,Yellow badge
+Low Confidence,Badge,Low,Confidence indicator,Gray badge
+Structural Type,Badge,Structural,Alert type indicator,Blue badge for infrastructure
+Activity Type,Badge,Activity,Alert type indicator,Orange badge for activity surge
+
+No Hotspots Empty,Empty State Title,No hotspots detected,Dashboard,No results match filters
+No Hotspots Message,Empty State Body,"Try adjusting your filters: expand date range, lower minimum score, or select 'All Types'",Dashboard,Actionable suggestions
+No Data Empty,Empty State Title,Waiting for satellite data,Tile view,Tile not yet processed
+No Data Message,Empty State Body,"This tile hasn't been processed yet. New data is typically available within 48 hours of satellite acquisition.",Tile view,Explanation and timeline
+First Time User Title,Empty State Title,Welcome to SIAD,Initial visit,Onboarding message
+First Time User Message,Empty State Body,"Start by exploring a demo hotspot to learn how the interface works, or jump straight to the live dashboard.",Initial visit,Two CTA options
+
+Tile Not Found Error,Error Title,Tile not found,API error,404 response
+Tile Not Found Message,Error Body,"Tile 'tile_999' doesn't exist in the database. Try selecting a valid tile from the list.",Tile error,Specific tile ID + suggestion
+Invalid Date Range Error,Error Title,Invalid date range,Validation error,Client-side validation
+Invalid Date Range Message,Error Body,"End date (2023-12-31) is before start date (2024-01-01). Please ensure the end date comes after the start date.",Date validation,Show actual dates
+Computation Failed Error,Error Title,Computation failed,API error,500 response
+Computation Failed Message,Error Body,"Could not compute residuals for tile_042. This might be a temporary issue. Try again in a moment, or contact support if the problem persists.",Computation error,Retry suggestion
+Network Error,Error Title,Connection error,Network failure,Fetch failure
+Network Error Message,Error Body,"Could not connect to SIAD API. Check your network connection and try again.",Network error,Simple troubleshooting
+
+Structural Dominant,Tooltip,Change is primarily visible in SAR data and persists under neutral weather conditions. Likely infrastructure or permanent modification.,Attribution label,Explain structural classification
+Activity Dominant,Tooltip,Change is primarily visible in nightlights data and may be temporary. Could indicate operations or events.,Attribution label,Explain activity classification
+Environmental Dominant,Tooltip,Change is explained by weather conditions and does not persist under neutral predictions. Likely seasonal or environmental.,Attribution label,Explain environmental classification
+Neutral Scenario,Tooltip,"Prediction under neutral weather (rain anomaly = 0, temp anomaly = 0). Used to isolate structural changes from weather effects.",Scenario selector,Explain counterfactual
+Observed Scenario,Tooltip,Prediction under actual observed weather conditions. Shows what the model expected given real climate.,Scenario selector,Explain observed baseline
+Score Meaning,Tooltip,"Residual score from 0 to 1. Higher scores indicate larger deviations from expected dynamics. 0.5+ = high confidence.",Score value,Explain score interpretation
+
+Status Active,Status Label,Active,Hotspot status,Detection still above threshold
+Status Resolved,Status Label,Resolved,Hotspot status,Detection dropped below threshold
+Status Investigating,Status Label,Under Review,Hotspot status,Manually flagged for investigation
+
+Month Format,Date Format,Jan 2024,Timeline labels,Short month + year
+Full Date Format,Date Format,2024-01-15,Data exports,ISO date format
+Relative Time,Time Format,2 months ago,Status updates,Relative to current month
+
+Count Hotspots,Stat Display,47 hotspots,Filter results,Total visible hotspots
+Count High Confidence,Stat Display,12 high confidence,Summary stats,High confidence count
+Count Tiles,Stat Display,256 tiles,AOI summary,Total tiles in region
+Percent Improvement,Stat Display,24% better than persistence,Baseline comparison,Relative improvement metric
+
+Demo Mode Banner,Banner,Demo Mode: Viewing quickstart-demo AOI (Jan 2021 - Dec 2023),Top banner,Indicate demo data
+Processing Banner,Banner,Processing new satellite data for May 2024... (Updated hourly),Top banner,Data freshness indicator
+Offline Banner,Banner,Offline mode: Showing cached data,Top banner,Network status

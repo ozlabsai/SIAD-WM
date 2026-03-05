@@ -1,7 +1,7 @@
 """Pydantic models for SIAD configuration validation."""
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 
 
 class AOIConfig(BaseModel):
@@ -41,6 +41,38 @@ class DataConfig(BaseModel):
         default=["s1", "s2", "viirs", "chirps", "era5"],
         description="Data sources",
     )
+    preprocessing_version: str = Field(
+        default="v2",
+        description="Preprocessing schema version (v1: weather only, v2: weather + temporal features)"
+    )
+    action_dim: int = Field(
+        default=4,
+        ge=1,
+        description="Action vector dimension (2 for v1, 4 for v2 with temporal features)"
+    )
+
+    @field_validator("preprocessing_version")
+    @classmethod
+    def validate_preprocessing_version(cls, v: str) -> str:
+        """Validate preprocessing version is v1 or v2."""
+        if v not in ["v1", "v2"]:
+            raise ValueError(f"preprocessing_version must be 'v1' or 'v2', got '{v}'")
+        return v
+
+    @field_validator("action_dim")
+    @classmethod
+    def validate_action_dim_consistency(cls, v: int, info) -> int:
+        """Validate action_dim matches preprocessing_version if both are specified."""
+        if "preprocessing_version" in info.data:
+            version = info.data["preprocessing_version"]
+            expected_dim = 4 if version == "v2" else 2
+            if v != expected_dim:
+                import warnings
+                warnings.warn(
+                    f"action_dim={v} does not match preprocessing_version='{version}' "
+                    f"(expected {expected_dim}). This may cause runtime errors."
+                )
+        return v
 
     @field_validator("start_month", "end_month")
     @classmethod
@@ -56,6 +88,105 @@ class DataConfig(BaseModel):
         return v
 
 
+class AntiCollapseConfig(BaseModel):
+    """Anti-collapse regularization configuration (VC-Reg)."""
+
+    type: Literal["vcreg"] = Field(
+        default="vcreg",
+        description="Anti-collapse method (currently only 'vcreg' supported)"
+    )
+    gamma: float = Field(
+        default=1.0,
+        gt=0.0,
+        description="Variance floor threshold (target std per dimension)"
+    )
+    alpha: float = Field(
+        default=25.0,
+        ge=0.0,
+        description="Variance loss weight"
+    )
+    beta: float = Field(
+        default=1.0,
+        ge=0.0,
+        description="Covariance loss weight"
+    )
+    lambda_: float = Field(
+        default=1.0,
+        ge=0.0,
+        alias="lambda",
+        description="Total anti-collapse loss weight"
+    )
+    apply_to: List[str] = Field(
+        default=["z_t"],
+        min_length=1,
+        description="Where to apply: ['z_t'] or ['z_t', 'z_pred_1']"
+    )
+
+    @field_validator("apply_to")
+    @classmethod
+    def validate_apply_to(cls, v: List[str]) -> List[str]:
+        """Validate apply_to targets are valid."""
+        valid_targets = {"z_t", "z_pred_1"}
+        invalid = set(v) - valid_targets
+        if invalid:
+            raise ValueError(f"Invalid apply_to targets: {invalid}. Must be in {valid_targets}")
+        return v
+
+
+class EMAConfig(BaseModel):
+    """EMA target encoder configuration."""
+
+    tau_start: float = Field(
+        default=0.99,
+        gt=0.0,
+        lt=1.0,
+        description="Initial EMA coefficient"
+    )
+    tau_end: float = Field(
+        default=0.995,
+        gt=0.0,
+        lt=1.0,
+        description="Final EMA coefficient after warmup"
+    )
+    warmup_steps: int = Field(
+        default=2000,
+        gt=0,
+        description="Number of steps to ramp from tau_start to tau_end"
+    )
+
+    @field_validator("tau_end")
+    @classmethod
+    def validate_tau_order(cls, v: float, info) -> float:
+        """Validate tau_start <= tau_end for monotonicity."""
+        if "tau_start" in info.data and v < info.data["tau_start"]:
+            raise ValueError(f"tau_end ({v}) must be >= tau_start ({info.data['tau_start']})")
+        return v
+
+    @field_validator("tau_start")
+    @classmethod
+    def validate_tau_start_minimum(cls, v: float) -> float:
+        """Validate tau_start >= 0.9 (recommended minimum)."""
+        if v < 0.9:
+            import warnings
+            warnings.warn(f"tau_start ({v}) < 0.9 may cause EMA instability")
+        return v
+
+
+class LossConfig(BaseModel):
+    """Training loss configuration."""
+
+    anti_collapse: Optional[AntiCollapseConfig] = Field(
+        default=None,
+        description="Anti-collapse regularization config (optional for backward compatibility)"
+    )
+
+
+class TrainConfig(BaseModel):
+    """Training configuration."""
+
+    loss: LossConfig = Field(default_factory=LossConfig, description="Loss function config")
+
+
 class ModelConfig(BaseModel):
     """World model training configuration."""
 
@@ -66,6 +197,7 @@ class ModelConfig(BaseModel):
     epochs: int = Field(default=50, description="Number of training epochs")
     learning_rate: float = Field(default=1e-4, description="Adam learning rate")
     seed: int = Field(default=42, description="Random seed for reproducibility")
+    ema: EMAConfig = Field(default_factory=EMAConfig, description="EMA target encoder config")
 
 
 class DetectionConfig(BaseModel):
@@ -112,5 +244,6 @@ class SIADConfig(BaseModel):
     aoi: AOIConfig
     data: DataConfig
     model: ModelConfig
+    train: TrainConfig = Field(default_factory=TrainConfig, description="Training config")
     detection: DetectionConfig
     validation: Optional[ValidationConfig] = None

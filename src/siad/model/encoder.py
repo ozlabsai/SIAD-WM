@@ -290,6 +290,9 @@ class TargetEncoderEMA(nn.Module):
         self.warmup_steps = warmup_steps
         self.current_step = 0
 
+        # T019: Monotonicity tracking
+        self.last_tau = tau_start  # Track last tau to enforce monotonicity
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -302,27 +305,109 @@ class TargetEncoderEMA(nn.Module):
             z_target = self.encoder(x)
         return z_target
 
+    def get_tau(self, step: int = None) -> float:
+        """Get current EMA coefficient tau (T020)
+
+        Per contracts/ema_api.md: Computes tau based on warmup schedule.
+
+        Args:
+            step: Training step (uses self.current_step if not provided)
+
+        Returns:
+            Current tau value
+        """
+        if step is None:
+            step = self.current_step
+
+        # Linear warmup schedule
+        if step < self.warmup_steps:
+            tau = self.tau_start + (self.tau_end - self.tau_start) * (step / self.warmup_steps)
+        else:
+            tau = self.tau_end
+
+        return tau
+
+    def get_ema_metrics(self, context_encoder: ContextEncoder) -> Dict:
+        """Get EMA health metrics (T021)
+
+        Per contracts/ema_api.md: Computes delta_ema and parameter norms.
+
+        Args:
+            context_encoder: Online encoder to compare against
+
+        Returns:
+            Dict with delta_stem, delta_transformer, encoder_norm, target_norm
+        """
+        metrics = {}
+
+        # Compute parameter differences and norms per module group
+        stem_deltas = []
+        stem_encoder_params = []
+        stem_target_params = []
+
+        transformer_deltas = []
+        transformer_encoder_params = []
+        transformer_target_params = []
+
+        for (name, target_param), (_, source_param) in zip(
+            self.encoder.named_parameters(),
+            context_encoder.named_parameters()
+        ):
+            # Absolute difference
+            delta = (target_param.data - source_param.data).abs().mean().item()
+
+            # Categorize by module (stem vs transformer)
+            if "stem" in name:
+                stem_deltas.append(delta)
+                stem_encoder_params.append(source_param.data.norm().item())
+                stem_target_params.append(target_param.data.norm().item())
+            else:
+                # Everything else is transformer (patchify, blocks, norm)
+                transformer_deltas.append(delta)
+                transformer_encoder_params.append(source_param.data.norm().item())
+                transformer_target_params.append(target_param.data.norm().item())
+
+        # Compute mean deltas
+        metrics["delta_stem"] = sum(stem_deltas) / len(stem_deltas) if stem_deltas else 0.0
+        metrics["delta_transformer"] = sum(transformer_deltas) / len(transformer_deltas) if transformer_deltas else 0.0
+
+        # Compute total parameter norms
+        metrics["encoder_norm"] = math.sqrt(sum(p ** 2 for p in stem_encoder_params + transformer_encoder_params))
+        metrics["target_norm"] = math.sqrt(sum(p ** 2 for p in stem_target_params + transformer_target_params))
+
+        return metrics
+
     @torch.no_grad()
-    def update_from_encoder(self, context_encoder: ContextEncoder, step: int = None):
-        """Update target encoder via EMA from context encoder
+    def update_from_encoder(self, context_encoder: ContextEncoder, step: int = None) -> Dict[str, float]:
+        """Update target encoder via EMA from context encoder (T022: Enhanced)
 
         Per MODEL.md Section 4.2:
         θ̄ ← τ θ̄ + (1-τ) θ
 
+        Enhanced per contracts/ema_api.md:
+        - Enforces monotonic tau schedule
+        - Returns EMA metrics
+
         Args:
             context_encoder: Source context encoder with updated parameters
             step: Current training step for EMA schedule (optional)
+
+        Returns:
+            Dict with tau and EMA health metrics
         """
         if step is not None:
             self.current_step = step
         else:
             self.current_step += 1
 
-        # Compute current tau (linear warmup)
-        if self.current_step < self.warmup_steps:
-            tau = self.tau_start + (self.tau_end - self.tau_start) * (self.current_step / self.warmup_steps)
-        else:
-            tau = self.tau_end
+        # Compute current tau using get_tau() (T020)
+        tau = self.get_tau(self.current_step)
+
+        # T019: Enforce monotonicity
+        assert tau >= self.last_tau, \
+            f"EMA tau decreased: {self.last_tau:.6f} → {tau:.6f} (step {self.current_step})"
+
+        self.last_tau = tau
 
         # EMA update: θ̄ ← τ θ̄ + (1-τ) θ
         for target_param, source_param in zip(
@@ -330,3 +415,9 @@ class TargetEncoderEMA(nn.Module):
             context_encoder.parameters()
         ):
             target_param.data.mul_(tau).add_(source_param.data, alpha=1 - tau)
+
+        # T022: Return metrics (backward compatible - callers can ignore)
+        metrics = self.get_ema_metrics(context_encoder)
+        metrics["tau"] = tau
+
+        return metrics

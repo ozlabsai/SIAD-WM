@@ -1,0 +1,102 @@
+{
+  "latent_token": {
+    "term": "Latent Token",
+    "short": "An encoded representation of a 16×16 pixel region",
+    "long": "SIAD's world model encodes satellite imagery into 256 latent tokens (16×16 grid). Each token captures patterns in a specific region. Working in latent space allows SIAD to focus on meaningful changes rather than raw pixel values."
+  },
+  "residual": {
+    "term": "Residual",
+    "short": "The difference between predicted and observed conditions",
+    "long": "Residual = Prediction Error. SIAD predicts what a region should look like based on past patterns and weather conditions. High residuals indicate unexpected changes—potential infrastructure acceleration or activity surges that violate expected dynamics."
+  },
+  "environmental_normalization": {
+    "term": "Environmental Normalization",
+    "short": "Predicting with neutral weather to isolate structural changes",
+    "long": "SIAD can predict under neutral weather conditions (rain anomaly = 0, temperature anomaly = 0). Comparing neutral predictions to observations isolates structural changes from seasonal and weather effects. If a change persists under neutral conditions, it's not explained by weather."
+  },
+  "persistence_baseline": {
+    "term": "Persistence Baseline",
+    "short": "Assumes no change from previous month",
+    "long": "Simple baseline that predicts 'this month will look like last month.' Useful for comparison. If SIAD outperforms persistence (lower residuals on normal patterns), it's learning real dynamics, not just repeating the past."
+  },
+  "seasonal_baseline": {
+    "term": "Seasonal Baseline",
+    "short": "Assumes same pattern as last year",
+    "long": "Baseline that predicts 'this month will look like the same month last year.' Accounts for seasonal cycles (vegetation, snow, agriculture). SIAD should outperform seasonal baseline on infrastructure changes while matching it on stable regions."
+  },
+  "structural_acceleration": {
+    "term": "Structural Acceleration",
+    "short": "Persistent infrastructure change detected",
+    "long": "Change that lasts 2+ months and is primarily visible in SAR (radar) data. Indicates construction, demolition, or permanent structural modification. These detections show high residuals under neutral weather, confirming they're not seasonal or environmental."
+  },
+  "activity_surge": {
+    "term": "Activity Surge",
+    "short": "Short-term increase in nighttime lights or human activity",
+    "long": "Temporary spike in VIIRS nightlights or other activity indicators lasting less than 3 months. May indicate events, operations, or short-lived changes. Less persistent than structural acceleration. Could be seasonal activity or temporary operations."
+  },
+  "confidence": {
+    "term": "Confidence Level",
+    "short": "Model's certainty in the detection (high/medium/low)",
+    "long": "Based on consistency across months, magnitude of residual, and spatial coherence. High = strong evidence, persistent signal across 3+ months. Medium = moderate evidence, 2 months persistence. Low = weak signal, noisy, or single-month detection."
+  },
+  "cosine_similarity": {
+    "term": "Cosine Similarity",
+    "short": "Measure of similarity between predicted and observed patterns",
+    "long": "Technical metric: 1 = identical patterns, 0 = orthogonal (unrelated), -1 = opposite. SIAD uses cosine distance (1 - similarity) as its residual metric. Higher distance indicates more unexpected change in the latent representation."
+  },
+  "world_model": {
+    "term": "World Model",
+    "short": "AI model that learns how regions normally evolve over time",
+    "long": "SIAD's world model learns spatiotemporal dynamics from 36 months of satellite imagery. It predicts future observations based on past context and weather conditions. By encoding normal evolution patterns, it can flag deviations that don't match expected dynamics."
+  },
+  "rollout": {
+    "term": "Rollout",
+    "short": "Multi-step prediction sequence into the future",
+    "long": "SIAD rolls out predictions 6 months into the future, one month at a time. Each prediction uses the previous prediction as input, creating a trajectory. Rollouts under different weather scenarios (neutral vs. observed) enable counterfactual analysis."
+  },
+  "counterfactual": {
+    "term": "Counterfactual",
+    "short": "Prediction under hypothetical conditions ('what if')",
+    "long": "A counterfactual rollout predicts outcomes under different conditions than what actually occurred. Example: 'What would this region look like with no rain anomalies?' Comparing counterfactuals to reality isolates specific factors like structural change vs. weather effects."
+  },
+  "tile": {
+    "term": "Tile",
+    "short": "A 256×256 pixel region (approximately 2.56 km square)",
+    "long": "SIAD divides the area of interest into non-overlapping tiles for processing. Each tile is 256×256 pixels at 10-meter resolution, covering about 2.56 km × 2.56 km. Residuals and scores are computed per tile, then clustered to form hotspots."
+  },
+  "hotspot": {
+    "term": "Hotspot",
+    "short": "A cluster of high-residual tiles indicating potential change",
+    "long": "Hotspots are spatially coherent clusters of 3+ tiles with elevated residuals lasting 2+ months. Each hotspot receives a confidence score, alert type classification (structural/activity), onset month, and duration. Hotspots are ranked for analyst review."
+  },
+  "modality": {
+    "term": "Modality",
+    "short": "Type of satellite data (SAR, optical, or nightlights)",
+    "long": "SIAD fuses three modalities: Sentinel-1 SAR (radar, cloud-proof), Sentinel-2 optical (visible/infrared), and VIIRS nightlights (human activity). Attribution analysis isolates which modalities drive each detection—structural changes show SAR dominance, activity surges show nightlights dominance."
+  },
+  "sar": {
+    "term": "SAR (Synthetic Aperture Radar)",
+    "short": "Cloud-proof radar satellite imagery",
+    "long": "Sentinel-1 SAR uses radar to image Earth's surface regardless of clouds or darkness. VV and VH polarizations capture structural properties. Changes in SAR indicate physical modifications: buildings, roads, cleared land. SAR is SIAD's primary structural change indicator."
+  },
+  "viirs": {
+    "term": "VIIRS Nightlights",
+    "short": "Satellite imagery of artificial lights at night",
+    "long": "VIIRS Day/Night Band captures nighttime artificial lighting from space. Increases in nightlights indicate human activity, operations, or electrification. Decreases may indicate power outages or abandonment. SIAD uses VIIRS to distinguish activity surges from structural acceleration."
+  },
+  "onset": {
+    "term": "Onset",
+    "short": "The first month a detection appears",
+    "long": "Onset marks when a hotspot first exceeded the residual threshold. Important for timeline analysis and understanding when infrastructure acceleration began. Earlier onset with long persistence indicates sustained construction or activity."
+  },
+  "duration": {
+    "term": "Duration",
+    "short": "Number of consecutive months a detection persists",
+    "long": "Duration measures how many months a hotspot remains above threshold. Longer duration increases confidence in structural acceleration. Short duration (1-2 months) may indicate temporary activity, environmental anomaly, or noise."
+  },
+  "anomaly": {
+    "term": "Anomaly (Weather/Climate)",
+    "short": "Deviation from normal weather patterns",
+    "long": "Weather anomalies are standardized deviations from historical norms: (observed - mean) / standard deviation. Rain anomaly > 0 = wetter than normal. Temperature anomaly > 0 = warmer than normal. SIAD conditions predictions on these anomalies to model environmental effects."
+  }
+}

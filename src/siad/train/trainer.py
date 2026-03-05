@@ -151,6 +151,9 @@ class Trainer:
             # 1. Encode context
             z0 = self.model.encode(x_context)
 
+            # T013: Capture encoder outputs z_t for VC-Reg anti-collapse
+            z_t = z0  # [B, N, D] - encoder outputs before rollout
+
             # 2. Rollout predictions
             H = self.config["rollout_horizon"]
             z_pred = self.model.rollout(z0, actions, H=H)
@@ -163,8 +166,24 @@ class Trainer:
             latent_dim = self.model.latent_dim
             z_target = z_target_flat.view(B, H_batch, 256, latent_dim)
 
-            # 4. Compute loss
-            loss, metrics = compute_jepa_world_model_loss(z_pred, z_target)
+            # 4. Compute loss with VC-Reg anti-collapse
+            # Extract anti-collapse config from self.config if available
+            anti_collapse_config = None
+            if "anti_collapse" in self.config:
+                ac_cfg = self.config["anti_collapse"]
+                anti_collapse_config = {
+                    "gamma": ac_cfg.get("gamma", 1.0),
+                    "alpha": ac_cfg.get("alpha", 25.0),
+                    "beta": ac_cfg.get("beta", 1.0),
+                    "lambda": ac_cfg.get("lambda", 1.0),
+                }
+
+            loss, metrics = compute_jepa_world_model_loss(
+                z_pred,
+                z_target,
+                z_t=z_t,  # NEW: pass encoder outputs for VC-Reg
+                anti_collapse_config=anti_collapse_config  # NEW: VC-Reg config
+            )
 
             # Backward
             self.optimizer.zero_grad()
@@ -190,7 +209,7 @@ class Trainer:
                     epoch_metrics[key] = []
                 epoch_metrics[key].append(value)
 
-            # Log to wandb every step
+            # Log to wandb every 10 steps (base metrics) and every 100 steps (detailed metrics)
             if self.use_wandb and batch_idx % 10 == 0:
                 batch_time = time.time() - batch_start
                 log_dict = {
@@ -204,6 +223,29 @@ class Trainer:
                 # Add JEPA-specific metrics
                 for key, value in metrics.items():
                     log_dict[f"train/{key}"] = value
+
+                # T014: Add anti-collapse metrics logging (every 100 steps for detailed metrics)
+                if self.global_step % 100 == 0:
+                    # Anti-collapse metrics (if using VC-Reg)
+                    if "ac/std_mean" in metrics:
+                        log_dict["train/ac/std_mean"] = metrics["ac/std_mean"]
+                        log_dict["train/ac/std_min"] = metrics["ac/std_min"]
+                        log_dict["train/ac/dead_dims_frac"] = metrics["ac/dead_dims_frac"]
+                        log_dict["train/ac/total"] = metrics["ac/total"]
+
+                    # T015: Add EMA health metrics logging
+                    # Get current tau
+                    if hasattr(self.model, 'target_encoder') and hasattr(self.model.target_encoder, 'get_tau'):
+                        tau = self.model.target_encoder.get_tau(step=self.global_step)
+                        log_dict["train/ema/tau"] = tau
+
+                        # Get EMA drift metrics
+                        if hasattr(self.model.target_encoder, 'get_ema_metrics'):
+                            ema_metrics = self.model.target_encoder.get_ema_metrics(self.model.encoder)
+                            log_dict["train/ema/delta_stem"] = ema_metrics.get("delta_stem", 0.0)
+                            log_dict["train/ema/delta_transformer"] = ema_metrics.get("delta_transformer", 0.0)
+                            log_dict["train/ema/encoder_norm"] = ema_metrics.get("encoder_norm", 0.0)
+                            log_dict["train/ema/target_norm"] = ema_metrics.get("target_norm", 0.0)
 
                 # GPU metrics
                 if torch.cuda.is_available():
