@@ -1,0 +1,47 @@
+# Preprocessing Configuration (v2 Schema)
+# Feature: 003-temporal-conditioning
+#
+# This configuration enables temporal conditioning by adding month-of-year
+# cyclical encoding to action vectors, helping the model distinguish seasonal
+# vegetation changes from infrastructure changes.
+
+preprocessing_version: "v2"
+
+# Output configuration
+output:
+  format: "manifest_jsonl"  # manifest.jsonl + GeoTIFF format
+  action_dim: 4  # Extended from 2 to include temporal features
+
+# Feature configuration
+features:
+  # Weather anomaly features (v1 baseline)
+  weather:
+    - name: "rain_anom"
+      index: 0
+      source: "CHIRPS"
+      description: "Precipitation anomaly vs 10-year climatology (z-score)"
+
+    - name: "temp_anom"
+      index: 1
+      source: "ERA5"
+      description: "Temperature anomaly vs climatology (z-score)"
+
+  # Temporal features (v2 extension)
+  temporal:
+    - name: "month_sin"
+      index: 2
+      formula: "sin(2π * month / 12)"
+      range: [-1, 1]
+      description: "Sine component of month-of-year cyclical encoding"
+
+    - name: "month_cos"
+      index: 3
+      formula: "cos(2π * month / 12)"
+      range: [-1, 1]
+      description: "Cosine component of month-of-year cyclical encoding"
+
+# Expected improvements with v2
+expected_improvements:
+  seasonal_transition_accuracy: ">20% reduction in false anomalies"
+  rollout_stability: "Error at step 6 < 15% growth (vs >30% baseline)"
+  training_overhead: "<5% throughput degradation"

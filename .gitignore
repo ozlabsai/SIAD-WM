@@ -14,6 +14,8 @@ data/
 !data/.gitkeep
 logs/
 *.log
+*.h5  # Large HDF5 datasets
+.env*  # Environment variables
 
 # Testing
 .pytest_cache/

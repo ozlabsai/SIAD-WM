@@ -245,6 +245,73 @@ class WorldModel(nn.Module):
         """
         self.target_encoder.update_from_encoder(self.context_encoder, step=step)
     
+    def load_state_dict(self, state_dict: dict, strict: bool = False, verbose: bool = True):
+        """Load model state with automatic action dimension upgrade.
+
+        Enables backward compatibility: v1 checkpoints (action_dim=2) can load
+        into v2 models (action_dim=4) by padding temporal feature weights with zeros.
+
+        Args:
+            state_dict: Model state dictionary
+            strict: Whether to enforce strict key matching (default: False for flexibility)
+            verbose: Whether to print upgrade messages
+
+        Example:
+            >>> model_v2 = WorldModel(action_dim=4)  # V2 model with temporal features
+            >>> checkpoint_v1 = torch.load('baseline_v1.pth')  # V1 checkpoint (action_dim=2)
+            >>> model_v2.load_state_dict(checkpoint_v1)
+            [WorldModel] Upgrading checkpoint: 2→4 dims (temporal features zero-initialized)
+        """
+        # Find action encoder weight key
+        action_encoder_key = None
+        for key in state_dict.keys():
+            if 'action_encoder' in key and 'mlp.0.weight' in key:
+                action_encoder_key = key
+                break
+
+        if action_encoder_key is not None:
+            checkpoint_weight = state_dict[action_encoder_key]
+            checkpoint_action_dim = checkpoint_weight.shape[1]  # [hidden_dim, action_dim]
+            current_action_dim = self.action_encoder.action_dim
+
+            if checkpoint_action_dim < current_action_dim:
+                # Dimension upgrade (e.g., v1→v2: 2→4)
+                old_weight = checkpoint_weight  # [hidden_dim, checkpoint_dim]
+                hidden_dim = old_weight.shape[0]
+
+                # Create new weight tensor with expanded dimensions
+                new_weight = torch.zeros(
+                    hidden_dim, current_action_dim,
+                    dtype=old_weight.dtype,
+                    device=old_weight.device
+                )
+
+                # Copy existing weights (weather features)
+                new_weight[:, :checkpoint_action_dim] = old_weight
+
+                # New columns (temporal features) remain zero-initialized
+                # This ensures temporal features start with neutral contribution
+
+                # Update state dict
+                state_dict[action_encoder_key] = new_weight
+
+                if verbose:
+                    print(
+                        f"[WorldModel] Upgrading checkpoint: {checkpoint_action_dim}→{current_action_dim} dims "
+                        f"(temporal features zero-initialized)"
+                    )
+
+            elif checkpoint_action_dim > current_action_dim:
+                # Dimension downgrade (e.g., v2→v1) - not supported
+                raise ValueError(
+                    f"Cannot load checkpoint with action_dim={checkpoint_action_dim} "
+                    f"into model with action_dim={current_action_dim}. "
+                    f"Downgrading from v2 to v1 is not supported."
+                )
+
+        # Call parent load_state_dict
+        super().load_state_dict(state_dict, strict=strict)
+
     def get_config(self) -> Dict:
         """Return model configuration for checkpointing"""
         return {

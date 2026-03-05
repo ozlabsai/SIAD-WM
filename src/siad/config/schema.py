@@ -41,6 +41,15 @@ class DataConfig(BaseModel):
         default=["s1", "s2", "viirs", "chirps", "era5"],
         description="Data sources",
     )
+    preprocessing_version: str = Field(
+        default="v2",
+        description="Preprocessing schema version (v1: weather only, v2: weather + temporal features)"
+    )
+    action_dim: int = Field(
+        default=4,
+        ge=1,
+        description="Action vector dimension (2 for v1, 4 for v2 with temporal features)"
+    )
 
     @field_validator("start_month", "end_month")
     @classmethod
@@ -53,6 +62,14 @@ class DataConfig(BaseModel):
             raise ValueError(f"Month must be in YYYY-MM format, got {v}")
         if not (1 <= int(month) <= 12):
             raise ValueError(f"Month must be 01-12, got {month}")
+        return v
+
+    @field_validator("preprocessing_version")
+    @classmethod
+    def validate_preprocessing_version(cls, v: str) -> str:
+        """Validate preprocessing version is v1 or v2."""
+        if v not in ["v1", "v2"]:
+            raise ValueError(f"preprocessing_version must be 'v1' or 'v2', got '{v}'")
         return v
 
 
