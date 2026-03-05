@@ -87,6 +87,14 @@ class DataConfig(BaseModel):
             raise ValueError(f"Month must be 01-12, got {month}")
         return v
 
+    @field_validator("preprocessing_version")
+    @classmethod
+    def validate_preprocessing_version(cls, v: str) -> str:
+        """Validate preprocessing version is v1 or v2."""
+        if v not in ["v1", "v2"]:
+            raise ValueError(f"preprocessing_version must be 'v1' or 'v2', got '{v}'")
+        return v
+
 
 class AntiCollapseConfig(BaseModel):
     """Anti-collapse regularization configuration (VC-Reg)."""
