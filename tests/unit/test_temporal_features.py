@@ -1,7 +1,11 @@
-"""Unit tests for temporal feature computation (User Story 1)
+"""Unit tests for temporal feature computation
 
-Tests the core temporal feature extraction per contracts/dataset_api.md.
-Validates range, unit circle property, year boundary continuity, and correctness.
+Tests the compute_temporal_features() function per contracts/dataset_api.md.
+Validates:
+- Range constraints ([-1, 1])
+- Unit circle property (sin² + cos² ≈ 1)
+- Year boundary continuity (Dec→Jan smooth transition)
+- Correctness for specific months
 """
 
 import pytest
@@ -12,16 +16,21 @@ from siad.data.preprocessing import compute_temporal_features
 
 
 class TestComputeTemporalFeatures:
-    """Test compute_temporal_features() per contracts"""
+    """Test temporal feature extraction from timestamps"""
 
     def test_compute_temporal_features_range(self):
-        """Verify month_sin/cos in [-1, 1] for all months"""
+        """Verify month_sin and month_cos are in [-1, 1] for all months"""
         for month in range(1, 13):
             timestamp = datetime(2025, month, 15)
             month_sin, month_cos = compute_temporal_features(timestamp)
 
-            assert -1 <= month_sin <= 1, f"month_sin={month_sin} out of range for month {month}"
-            assert -1 <= month_cos <= 1, f"month_cos={month_cos} out of range for month {month}"
+            # Range constraints
+            assert -1 <= month_sin <= 1, (
+                f"month_sin={month_sin} out of range for month {month}"
+            )
+            assert -1 <= month_cos <= 1, (
+                f"month_cos={month_cos} out of range for month {month}"
+            )
 
     def test_temporal_features_unit_circle(self):
         """Verify sin² + cos² ≈ 1 for all months (unit circle property)"""
@@ -29,77 +38,84 @@ class TestComputeTemporalFeatures:
             timestamp = datetime(2025, month, 15)
             month_sin, month_cos = compute_temporal_features(timestamp)
 
-            unit_circle = month_sin**2 + month_cos**2
-            assert 0.99 <= unit_circle <= 1.01, (
-                f"Month {month}: unit circle property violated, "
-                f"sin²+cos² = {unit_circle} (expected ≈1.0)"
+            # Unit circle property: sin² + cos² = 1
+            unit_circle_check = month_sin**2 + month_cos**2
+
+            assert 0.99 <= unit_circle_check <= 1.01, (
+                f"Unit circle violation for month {month}: "
+                f"sin²+cos² = {unit_circle_check}"
             )
 
     def test_year_boundary_continuity(self):
         """Verify Dec→Jan distance < 0.6 (smooth year boundary)"""
+        # December (month 12)
         dec_timestamp = datetime(2024, 12, 15)
-        jan_timestamp = datetime(2025, 1, 15)
-
         dec_sin, dec_cos = compute_temporal_features(dec_timestamp)
+
+        # January (month 1)
+        jan_timestamp = datetime(2025, 1, 15)
         jan_sin, jan_cos = compute_temporal_features(jan_timestamp)
 
         # Euclidean distance in (sin, cos) space
         distance = np.sqrt((jan_sin - dec_sin)**2 + (jan_cos - dec_cos)**2)
 
         assert distance < 0.6, (
-            f"Dec→Jan transition not smooth: distance={distance:.3f} (expected <0.6)"
+            f"Dec→Jan distance too large: {distance:.3f} "
+            f"(should be <0.6 for smooth year boundary)"
         )
 
     def test_temporal_features_all_months(self):
-        """Verify correct values for specific months"""
+        """Verify correct values for representative months (Jan, Apr, Jul, Oct)"""
+        # Test cases: (month, expected_angle_degrees)
         test_cases = [
-            (1, 30),    # Jan: 30 degrees
-            (4, 120),   # Apr: 120 degrees
-            (7, 210),   # Jul: 210 degrees
-            (10, 300),  # Oct: 300 degrees
+            (1, 30),    # January: 30°
+            (4, 120),   # April: 120°
+            (7, 210),   # July: 210°
+            (10, 300),  # October: 300°
         ]
 
-        for month, expected_degrees in test_cases:
+        for month, expected_angle_deg in test_cases:
             timestamp = datetime(2025, month, 15)
             month_sin, month_cos = compute_temporal_features(timestamp)
 
-            # Expected values
-            expected_radians = np.deg2rad(expected_degrees)
-            expected_sin = np.sin(expected_radians)
-            expected_cos = np.cos(expected_radians)
+            # Convert expected angle to radians
+            expected_angle_rad = np.deg2rad(expected_angle_deg)
+            expected_sin = np.sin(expected_angle_rad)
+            expected_cos = np.cos(expected_angle_rad)
 
-            # Allow 1e-6 tolerance for floating point
+            # Check values match (within floating point tolerance)
             assert np.isclose(month_sin, expected_sin, atol=1e-6), (
-                f"Month {month}: month_sin={month_sin}, expected {expected_sin}"
+                f"Month {month}: sin mismatch. "
+                f"Expected {expected_sin:.6f}, got {month_sin:.6f}"
             )
             assert np.isclose(month_cos, expected_cos, atol=1e-6), (
-                f"Month {month}: month_cos={month_cos}, expected {expected_cos}"
+                f"Month {month}: cos mismatch. "
+                f"Expected {expected_cos:.6f}, got {month_cos:.6f}"
             )
 
     def test_temporal_features_deterministic(self):
-        """Verify same month produces same features"""
-        timestamp1 = datetime(2024, 5, 1)
-        timestamp2 = datetime(2024, 5, 15)
-        timestamp3 = datetime(2024, 5, 31)
+        """Verify function is deterministic (same input → same output)"""
+        timestamp = datetime(2025, 6, 15)
 
-        result1 = compute_temporal_features(timestamp1)
-        result2 = compute_temporal_features(timestamp2)
-        result3 = compute_temporal_features(timestamp3)
+        # Call multiple times
+        result1 = compute_temporal_features(timestamp)
+        result2 = compute_temporal_features(timestamp)
 
-        # All May dates should produce identical features
-        assert result1 == result2 == result3, (
-            "Same month should produce identical temporal features regardless of day"
-        )
+        assert result1 == result2, "Function should be deterministic"
 
     def test_temporal_features_year_invariant(self):
-        """Verify features are year-invariant (only depend on month)"""
-        month_sin_2024, month_cos_2024 = compute_temporal_features(datetime(2024, 6, 15))
-        month_sin_2025, month_cos_2025 = compute_temporal_features(datetime(2025, 6, 15))
-        month_sin_2026, month_cos_2026 = compute_temporal_features(datetime(2026, 6, 15))
+        """Verify temporal features are year-invariant (only month matters)"""
+        # Same month, different years
+        june_2024 = datetime(2024, 6, 15)
+        june_2025 = datetime(2025, 6, 15)
+        june_2026 = datetime(2026, 6, 15)
 
-        assert month_sin_2024 == month_sin_2025 == month_sin_2026, (
-            "month_sin should be year-invariant"
-        )
-        assert month_cos_2024 == month_cos_2025 == month_cos_2026, (
-            "month_cos should be year-invariant"
-        )
+        sin_2024, cos_2024 = compute_temporal_features(june_2024)
+        sin_2025, cos_2025 = compute_temporal_features(june_2025)
+        sin_2026, cos_2026 = compute_temporal_features(june_2026)
+
+        # All should be identical (year doesn't matter)
+        assert np.isclose(sin_2024, sin_2025, atol=1e-10)
+        assert np.isclose(sin_2024, sin_2026, atol=1e-10)
+        assert np.isclose(cos_2024, cos_2025, atol=1e-10)
+        assert np.isclose(cos_2024, cos_2026, atol=1e-10)

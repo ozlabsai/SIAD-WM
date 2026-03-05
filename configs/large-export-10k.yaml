@@ -1,0 +1,50 @@
+# SIAD Large Export Configuration - 10K Samples
+# For serious model training with diverse geographic coverage
+
+aoi:
+  aoi_id: "large-export-10k"
+  bounds:
+    # San Francisco Bay Area - EXPANDED to cover entire Bay Area + Peninsula
+    # ~72km × 72km ≈ 784 tiles (28×28 grid)
+    # Includes SF, Oakland, San Jose, Palo Alto, Napa, Santa Cruz
+    min_lon: -123.0
+    max_lon: -121.5
+    min_lat: 36.9
+    max_lat: 38.0
+  projection: "EPSG:3857"
+  resolution_m: 10
+  tile_size_px: 256  # 2.56km per tile
+
+data:
+  gcp_project: "siad-earth-engine"
+  gcs_bucket: "siad-exports"
+  export_path: "gs://siad-exports/siad/{aoi_id}"
+  start_month: "2021-01"
+  end_month: "2024-12"  # 48 months (4 years)
+  sources:
+    - "s1"      # Sentinel-1 SAR (all-weather)
+    - "s2"      # Sentinel-2 optical
+    - "viirs"   # VIIRS nighttime lights
+    - "chirps"  # CHIRPS precipitation
+
+# Expected output:
+# - 28 × 28 = 784 tiles
+# - 48 months per tile
+# - 784 × 48 = 37,632 samples (~38k, plenty for training!)
+
+model:
+  latent_dim: 256
+  context_length: 6
+  rollout_horizon: 6
+  batch_size: 16
+  epochs: 50
+  learning_rate: 1.0e-4
+  seed: 42
+
+detection:
+  percentile_threshold: 99.0
+  persistence_months: 2
+  min_cluster_size: 3
+  scenarios:
+    - "neutral"
+    - "observed"

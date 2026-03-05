@@ -1,0 +1,79 @@
+# Anti-Collapse Training Stability Configuration Example
+# Feature: 002-anti-collapse
+#
+# This configuration demonstrates the new anti-collapse mechanisms added to SIAD training.
+# All parameters shown with their default values. Uncomment and modify as needed.
+
+# Training configuration
+train:
+  loss:
+    # Anti-collapse regularization (VC-Reg: Variance + Covariance penalties)
+    anti_collapse:
+      # Type of anti-collapse method (currently only "vcreg" supported)
+      type: "vcreg"
+
+      # Variance floor threshold - target std per dimension
+      # Lower values are more lenient, higher values enforce more spread
+      # Default: 1.0, Range: > 0.0
+      gamma: 1.0
+
+      # Variance loss weight - controls strength of variance floor penalty
+      # Increase if representations collapse (low variance)
+      # Default: 25.0, Range: >= 0.0
+      alpha: 25.0
+
+      # Covariance loss weight - controls strength of decorrelation penalty
+      # Increase if dimensions become correlated
+      # Default: 1.0, Range: >= 0.0
+      beta: 1.0
+
+      # Total anti-collapse weight - scales the combined loss before adding to JEPA loss
+      # Increase if collapse detected, decrease if JEPA training stalls
+      # Default: 1.0, Range: >= 0.0
+      lambda: 1.0
+
+      # Where to apply anti-collapse loss
+      # - ["z_t"]: Apply to encoder outputs only (recommended)
+      # - ["z_t", "z_pred_1"]: Also apply to first prediction step (experimental)
+      # Default: ["z_t"]
+      apply_to: ["z_t"]
+
+# Model configuration
+model:
+  # EMA (Exponential Moving Average) target encoder configuration
+  ema:
+    # Initial EMA coefficient - lower means faster target updates
+    # Should be >= 0.9 for stability
+    # Default: 0.99, Range: 0.0 < tau_start < 1.0
+    tau_start: 0.99
+
+    # Final EMA coefficient after warmup - higher means slower target updates
+    # Must be >= tau_start for monotonic schedule
+    # Default: 0.995, Range: 0.0 < tau_end < 1.0
+    tau_end: 0.995
+
+    # Number of training steps to ramp from tau_start to tau_end
+    # Longer warmup = smoother transition
+    # Default: 2000, Range: > 0
+    warmup_steps: 2000
+
+# Monitoring Guidelines (not config, for reference):
+#
+# Healthy Ranges (logged to W&B):
+#   ac/std_mean: 0.3 - 2.0 (average std across dimensions)
+#   ac/dead_dims_frac: < 0.1 (fraction of low-variance dimensions)
+#   ac/total: 0.01 - 0.5 (anti-collapse loss magnitude)
+#   ema/tau: 0.99 - 0.999 (EMA coefficient)
+#   ema/delta_stem: 0.001 - 0.1 (parameter drift)
+#
+# If collapse detected (ac/std_mean < 0.3 or ac/dead_dims_frac > 0.1):
+#   - Increase lambda (e.g., 2.0)
+#   - Increase alpha (e.g., 50.0)
+#
+# If JEPA stalls (loss plateaus, bland representations):
+#   - Decrease lambda (e.g., 0.5)
+#
+# If EMA unstable (delta spikes, tau jumps):
+#   - Increase tau_start (e.g., 0.995)
+#   - Increase tau_end (e.g., 0.999)
+#   - Extend warmup_steps (e.g., 5000)

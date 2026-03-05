@@ -1,102 +1,295 @@
-# Training Configuration for Temporal Conditioning (V2)
-# Feature: 003-temporal-conditioning
+# SIAD Training Configuration v2 - Temporal Conditioning
+# JEPA World Model Training with Month-of-Year Cyclical Encoding
+# Extends v0.3 with temporal features for seasonal context
 #
-# This configuration enables temporal conditioning by using action_dim=4
-# to include month-of-year cyclical features (month_sin, month_cos) alongside
-# weather anomalies (rain_anom, temp_anom).
-#
-# Expected Improvements:
-# - >20% reduction in false anomalies during seasonal transitions
-# - Rollout error at step 6 < 15% growth (vs >30% baseline)
-# - <5% training throughput degradation
+# Key Changes from v1/baseline:
+# - action_dim: 2 → 4 (adds month_sin, month_cos temporal features)
+# - preprocessing_version: "v1" → "v2"
+# - Expected improvements:
+#   - >20% reduction in false anomalies during seasonal transitions
+#   - >10% reduction in rollout error at step 6 (seasonal boundary crossings)
+#   - <5% increase in training time (negligible overhead)
 
+version:
+  config_version: "2.0"
+  model_spec_version: "0.2"
+  band_order_version: "v1"
+  preprocessing_version: "v2"  # V2: Temporal conditioning enabled
+
+# Dataset configuration
 data:
-  dataset: "gcs://siad-training-data"
-  train_split: 0.8
-  val_split: 0.2
+  manifest_path: "gs://siad-exports/siad/bay-area-extended-v03/manifest.jsonl"
+  data_root: "gs://siad-exports/siad/bay-area-extended-v03/"
+
+  # Training statistics (from export config)
+  expected_tiles: 784
+  expected_months: 48
+  expected_frames: 37632
+
+  # Window sampling for training
+  rollout_horizon: 6  # H=6 (predict 6 future frames)
+  expected_windows: 32928  # tiles × (months - H)
+
+  # Data loading
+  batch_size: 16
   num_workers: 8
-  pin_memory: true
-  persistent_workers: true
   prefetch_factor: 2
-  preprocessing_version: "v2"  # Enable temporal features
-  action_dim: 4                 # Extended action vector
 
-training:
-  batch_size: 32
-  epochs: 50
+  # Train/val split with spatial buffer
+  split_strategy: "spatial_buffered"
+  train_fraction: 0.80
+  val_fraction: 0.15
+  buffer_fraction: 0.05
 
-  # Optimization
-  learning_rate: 1.0e-4
-  weight_decay: 1.0e-5
-  grad_clip_norm: 1.0
+  # Quality filtering
+  min_s2_valid_frac: 0.3
 
-  # Mixed precision
-  mixed_precision: "bf16"
+  # Input shape validation
+  input_channels:
+    min: 8
+    max: 9
+  input_height: 256
+  input_width: 256
 
-  # Gradient accumulation
-  gradient_accumulation_steps: 1
+  # V2 Action schema (temporal conditioning)
+  # Temporal features added for seasonal context
+  action_dim: 4  # V2: Extended to 4 for temporal features (month_sin, month_cos)
 
-  # Scheduler
-  scheduler: "cosine"
-  warmup_steps: 500
+  action_schema:
+    - name: "rain_anom"
+      index: 0
+      description: "Precipitation anomaly (z-score vs 10-yr climatology)"
+      units: "dimensionless"
+      source: "CHIRPS monthly aggregation"
+    - name: "temp_anom"
+      index: 1
+      description: "Temperature anomaly (z-score vs climatology)"
+      units: "dimensionless"
+      source: "ERA5 monthly mean"
+    - name: "month_sin"
+      index: 2
+      description: "Temporal feature: sin(2π*month/12) for cyclical month encoding"
+      units: "dimensionless"
+      range: [-1, 1]
+      source: "Computed from timestamp"
+    - name: "month_cos"
+      index: 3
+      description: "Temporal feature: cos(2π*month/12) for cyclical month encoding"
+      units: "dimensionless"
+      range: [-1, 1]
+      source: "Computed from timestamp"
 
-  # EMA
-  ema_momentum: 0.996
-
-  # Checkpointing
-  save_every: 5
-  checkpoint_dir: "checkpoints/temporal_v2"
-  keep_last_n: 3
-
-  # Logging
-  log_every: 10
-  use_wandb: true
-  wandb_project: "siad-temporal-conditioning"
-
-  # Reproducibility
-  seed: 42
-
+# Model architecture (JEPA World Model - V2 with temporal conditioning)
 model:
-  # Architecture per MODEL.md
-  in_channels: 8
-  latent_dim: 512
-  action_dim: 4  # V2: [rain_anom, temp_anom, month_sin, month_cos]
+  architecture: "jepa_world_model"
 
-  # Encoder
-  encoder_blocks: 4
-  encoder_heads: 8
-  encoder_mlp_dim: 2048
+  # Token dimensions (unchanged from v1)
+  token_dim: 512
+  num_tokens: 256
+  spatial_grid: [16, 16]
 
-  # Transition
-  transition_blocks: 6
-  transition_heads: 8
-  transition_mlp_dim: 2048
+  # Context Encoder fθ (trainable) - unchanged
+  context_encoder:
+    stem:
+      type: "cnn"
+      layers:
+        - type: "conv"
+          kernel_size: 3
+          stride: 1
+          out_channels: 64
+          norm: "groupnorm"
+          activation: "silu"
+        - type: "conv"
+          kernel_size: 3
+          stride: 2
+          out_channels: 128
+          norm: "groupnorm"
+          activation: "silu"
+        - type: "conv"
+          kernel_size: 3
+          stride: 1
+          out_channels: 128
+          norm: "groupnorm"
+          activation: "silu"
 
-  # Decoder
-  decoder_blocks: 4
-  decoder_heads: 8
-  decoder_mlp_dim: 2048
+    patchify:
+      patch_size: 8
+      projection_dim: 512
 
-  # Action encoder (v2-specific)
+    transformer:
+      num_layers: 4
+      hidden_dim: 512
+      num_heads: 8
+      ffn_dim: 2048
+      dropout: 0.1
+      attention_dropout: 0.1
+      layer_norm_eps: 1.0e-6
+      norm_first: true
+
+    positional_embedding:
+      spatial_2d: true
+      temporal: false
+
+  # Target Encoder fθ̄ (EMA, stop-grad) - unchanged
+  target_encoder:
+    ema_schedule:
+      init_tau: 0.99
+      end_tau: 0.999
+      schedule: "cosine"
+      warmup_epochs: 5
+    stop_grad: true
+
+  # Action Encoder hφ - V2: Extended input dimension
   action_encoder:
-    input_dim: 4        # 2 weather + 2 temporal
+    input_dim: 4  # V2: Extended to 4 for temporal features (month_sin, month_cos)
     hidden_dim: 64
     output_dim: 128
+    layers:
+      - type: "linear"
+        in_features: 4  # V2: action_dim = 4
+        out_features: 64
+        activation: "silu"
+      - type: "linear"
+        in_features: 64
+        out_features: 128
+        activation: "silu"
 
-# Validation
+  # Transition Model Fψ (Markov world model) - unchanged
+  transition:
+    action_conditioning:
+      action_token: true
+      action_token_projection: 512
+      film: true
+      film_hidden_dim: 128
+      film_output_dim: 1024
+
+    transformer:
+      num_layers: 6
+      hidden_dim: 512
+      num_heads: 8
+      ffn_dim: 2048
+      dropout: 0.1
+      attention_dropout: 0.1
+      layer_norm_eps: 1.0e-6
+      norm_first: true
+
+    positional_embedding:
+      spatial_2d: true
+      action_token_pos: "learned"
+
+# Training hyperparameters - unchanged from v1
+training:
+  max_epochs: 50
+  learning_rate: 1.0e-4
+  weight_decay: 0.05
+  optimizer: "AdamW"
+  betas: [0.9, 0.95]
+
+  lr_scheduler: "cosine"
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+
+  max_grad_norm: 1.0
+  gradient_accumulation_steps: 1
+
+  use_amp: true
+  amp_dtype: "bfloat16"
+
+  checkpoint_every_n_epochs: 5
+  save_top_k: 3
+  monitor_metric: "val/jepa_loss"
+  monitor_mode: "min"
+
+# Loss function (JEPA + anti-collapse) - unchanged
+loss:
+  jepa:
+    weight: 1.0
+    distance_type: "cosine"
+    per_step_weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    reduction: "mean"
+
+  anticollapse:
+    type: "vcreg"
+    apply_to: ["z_pred"]
+    gamma: 1.0
+    alpha: 25.0
+    beta: 1.0
+    lambda: 0.1
+
+  spatial_smooth:
+    enabled: false
+    weight: 0.0
+    type: "total_variation"
+
+# Logging and monitoring
+logging:
+  project_name: "siad-world-model"
+  experiment_name: "bay-area-v03-temporal-v2"
+  log_every_n_steps: 50
+  log_gradients: false
+  log_weights: false
+
+  metrics:
+    - "train/jepa_loss"
+    - "train/anticollapse_loss"
+    - "train/total_loss"
+    - "val/jepa_loss"
+    - "val/anticollapse_loss"
+    - "val/total_loss"
+    - "val/token_variance"
+    - "val/token_covariance"
+    - "val/token_std_mean"
+    - "val/token_std_min"
+    - "lr"
+    - "ema_tau"
+    - "grad_norm"
+    - "batch/s2_valid_frac_mean"
+    - "batch/action_magnitude"
+
+# Reproducibility
+seed: 42
+deterministic: true
+benchmark: false
+
+# Hardware configuration
+hardware:
+  accelerator: "gpu"
+  devices: 1
+  precision: "bf16-mixed"
+  strategy: "auto"
+
+# Distributed training (optional)
+distributed:
+  enabled: false
+  strategy: "ddp"
+  find_unused_parameters: false
+
+# Validation strategy
 validation:
-  eval_every: 5          # Evaluate every 5 epochs
-  num_rollout_steps: 6   # Test 6-month rollouts
-  save_predictions: true # Save rollout visualizations
+  check_val_every_n_epoch: 1
+  val_batches_per_epoch: null
 
-# Comments for reference
-# Action vector schema (v2):
-#   [0]: rain_anom    - CHIRPS precipitation anomaly (z-score)
-#   [1]: temp_anom    - ERA5 temperature anomaly (z-score)
-#   [2]: month_sin    - sin(2π * month / 12)
-#   [3]: month_cos    - cos(2π * month / 12)
-#
-# Backward compatibility:
-#   - V1 checkpoints (action_dim=2) can load into V2 models
-#   - Temporal weights will be zero-initialized automatically
-#   - Fine-tuning from V1→V2 supported via model.load_state_dict()
+  stratify_by_quality: true
+  quality_bins:
+    - name: "high_quality"
+      min_s2_valid_frac: 0.7
+    - name: "medium_quality"
+      min_s2_valid_frac: 0.4
+      max_s2_valid_frac: 0.7
+    - name: "low_quality"
+      min_s2_valid_frac: 0.3
+      max_s2_valid_frac: 0.4
+
+# Early stopping (optional)
+early_stopping:
+  enabled: false
+  monitor: "val/jepa_loss"
+  patience: 10
+  min_delta: 1.0e-4
+
+# V2 TRAINING NOTES:
+# 1. Temporal features (month_sin, month_cos) provide seasonal context
+# 2. Model learns to distinguish seasonal vegetation changes from infrastructure changes
+# 3. Expected >20% reduction in false anomalies during seasonal transitions
+# 4. Backward compatible: can load v1 checkpoints (temporal weights zero-initialized)
+# 5. Training throughput impact: <5% (negligible, 2 extra input dims)

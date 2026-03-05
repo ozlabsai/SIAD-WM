@@ -45,3 +45,56 @@ expected_improvements:
   seasonal_transition_accuracy: ">20% reduction in false anomalies"
   rollout_stability: "Error at step 6 < 15% growth (vs >30% baseline)"
   training_overhead: "<5% throughput degradation"
+# Preprocessing Configuration for Temporal Conditioning (v2 schema)
+#
+# This configuration enables temporal features (month_sin, month_cos) alongside
+# weather anomalies for seasonal context in the SIAD world model.
+#
+# Changes from v1:
+# - Action vector extended: [rain_anom, temp_anom] → [rain_anom, temp_anom, month_sin, month_cos]
+# - Action dimension: 2 → 4
+# - Requires timestamp metadata for temporal feature extraction
+
+# Preprocessing version
+preprocessing_version: "v2"
+
+# Temporal features configuration
+temporal_features:
+  - month_sin  # sin(2π * month / 12)
+  - month_cos  # cos(2π * month / 12)
+
+# Data pipeline settings
+data:
+  # Source data paths
+  raw_tiles_dir: "data/raw_tiles"
+  output_dataset: "data/processed/dataset_v2.h5"
+
+  # Temporal parameters
+  horizon: 6  # Rollout horizon (months)
+  context_length: 1  # Context observation count
+
+  # Quality filters
+  min_valid_pixels: 0.7  # Minimum valid pixel fraction (cloud filtering)
+
+# Action features
+actions:
+  weather:
+    - rain_anom  # Precipitation anomaly (mm/day)
+    - temp_anom  # Temperature anomaly (°C)
+  temporal:
+    - month_sin  # Cyclical month encoding
+    - month_cos  # Cyclical month encoding
+
+# Expected output schema
+output_schema:
+  observations: "[N, C, H, W]"  # Satellite imagery
+  actions: "[N, horizon, 4]"     # Extended action vectors with temporal features
+  timestamps: "[N, horizon+1]"   # Datetime64 for context + rollout
+
+# Backward compatibility
+backward_compatible: true  # v1 datasets can still load (action_dim=2 with zero-padding)
+
+# Processing metadata
+created: "2026-03-05"
+feature: "003-temporal-conditioning"
+description: "Temporal conditioning preprocessing with month-of-year cyclical encoding"

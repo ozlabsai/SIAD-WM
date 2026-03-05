@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Anduril Lattice-inspired Dark Theme */
+:root {
+  --background: #0a0a0a;
+  --panel: #1a1a1a;
+  --border: #262626;
+  --text-primary: #ffffff;
+  --text-secondary: #a3a3a3;
+  --accent: #22d3ee;
+  --alert-warning: #fbbf24;
+  --alert-danger: #ef4444;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html,
+body {
+  max-width: 100vw;
+  overflow-x: hidden;
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+body {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Mapbox GL CSS - Required for map rendering */
+@import 'mapbox-gl/dist/mapbox-gl.css';
+
+/* Remove default link styles */
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #404040;
+}
+
+/* Remove focus outline, add custom focus styles */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* High contrast borders */
+.border {
+  border-color: var(--border);
+}
+
+/* Button base styles */
+button {
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Badge styles */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 4px;
+}
+
+.badge-high {
+  background-color: #166534;
+  color: #86efac;
+}
+
+.badge-medium {
+  background-color: #713f12;
+  color: #fde047;
+}
+
+.badge-low {
+  background-color: #374151;
+  color: #d1d5db;
+}
+
+.badge-structural {
+  background-color: #1e3a8a;
+  color: #93c5fd;
+}
+
+.badge-activity {
+  background-color: #9a3412;
+  color: #fdba74;
+}
+
+/* Card styles */
+.card {
+  background-color: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.card:hover {
+  border-color: #404040;
+}
+
+/* Loading spinner */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* No gradients, no glows - pure high contrast design */

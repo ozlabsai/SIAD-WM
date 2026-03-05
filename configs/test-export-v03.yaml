@@ -1,0 +1,51 @@
+# SIAD Test Export Configuration v0.3
+# Small test to validate v0.3 spec before full export
+# ~9,400 samples for baseline training validation
+
+aoi:
+  aoi_id: "test-export-v03"
+  bounds:
+    # San Francisco Bay Area - 36km × 36km core area
+    # Covers SF, Oakland, Berkeley, San Jose
+    min_lon: -122.7
+    max_lon: -122.2
+    min_lat: 37.6
+    max_lat: 37.9
+  projection: "EPSG:32610"  # UTM Zone 10N (spec-compliant)
+  resolution_m: 10
+  tile_size_px: 256
+
+data:
+  gcp_project: "siad-earth-engine"
+  gcs_bucket: "siad-exports"
+  export_path: "gs://siad-exports/siad/{aoi_id}"
+  start_month: "2021-01"
+  end_month: "2024-12"  # 48 months
+  sources:
+    - "s1"      # Sentinel-1 SAR
+    - "s2"      # Sentinel-2 optical
+    - "viirs"   # VIIRS nighttime lights
+    - "chirps"  # CHIRPS precipitation
+
+# Expected output:
+# - 14 × 14 = 196 tiles (36km × 36km core Bay Area)
+# - 48 months per tile
+# - 196 × 48 = 9,408 tile-month frames
+# - 196 × 42 = 8,232 training windows (with H=6 rollout)
+
+# Stub model/detection sections for config validation
+model:
+  latent_dim: 512  # Correct token_dim per spec
+  context_length: 1  # Single-frame context (Markov)
+  rollout_horizon: 6
+  batch_size: 16
+  epochs: 50
+  learning_rate: 1.0e-4
+  seed: 42
+
+detection:
+  percentile_threshold: 99.0
+  persistence_months: 2
+  min_cluster_size: 3
+  scenarios:
+    - "neutral"

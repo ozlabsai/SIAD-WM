@@ -2,7 +2,7 @@
   "version": "v2",
   "preprocessing_version": "v2",
   "created_at": "2026-03-05T00:00:00Z",
-  "git_commit": "pending",
+  "git_commit": "a30489ef9087b6f5dca2bcc381fb852b962ea849",
   "feature": "003-temporal-conditioning",
   "description": "Preprocessing configuration for temporal conditioning with month-of-year cyclical encoding",
 
@@ -112,27 +112,33 @@
 
   "performance_targets": {
     "training_throughput_degradation": "<5%",
-    "model_parameter_increase": "128 params (0.0002% of total)",
+    "model_parameter_increase": "128 params (0.0001% of ~100M total)",
     "seasonal_transition_false_positive_reduction": ">20%",
     "rollout_error_reduction": ">10% at step 6"
   },
 
   "usage": {
     "preprocessing": {
-      "command": "uv run siad preprocess --config configs/preprocess-v2.yaml"
+      "command": "uv run siad preprocess --preprocessing-version v2 --input raw_tiles/ --output dataset_v2.h5",
+      "config": "configs/preprocess-v2.yaml"
     },
     "training": {
-      "command": "uv run siad train --config configs/train-temporal-v2.yaml"
+      "command": "uv run siad train --config configs/train-temporal-v2.yaml",
+      "config": "configs/train-temporal-v2.yaml"
     },
     "validation": {
       "unit_tests": "uv run pytest tests/unit/test_temporal_features.py",
-      "integration_tests": "uv run pytest tests/integration/"
+      "integration_tests": "uv run pytest tests/integration/test_rollout_stability.py"
     }
   },
 
   "references": {
     "spec": "specs/003-003-temporal-conditioning/spec.md",
     "plan": "specs/003-003-temporal-conditioning/plan.md",
-    "tasks": "specs/003-003-temporal-conditioning/tasks.md"
+    "tasks": "specs/003-003-temporal-conditioning/tasks.md",
+    "contracts": [
+      "specs/003-003-temporal-conditioning/contracts/dataset_api.md",
+      "specs/003-003-temporal-conditioning/contracts/model_api.md"
+    ]
   }
 }
